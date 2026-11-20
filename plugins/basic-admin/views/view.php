@@ -3445,14 +3445,14 @@
         <span class="session-lock-avatar"><?=esc($__lockInitials)?></span>
         <span><?=esc($__lockDisplayName)?></span>
       </div>
-      <form class="session-lock-form" id="sessionLockForm" method="post" action="<?=esc(ROOT . '/admin/unlock')?>">
+      <form class="session-lock-form" id="sessionLockForm" method="post" action="<?=esc(rtrim(ROOT, '/') . '/admin/unlock')?>">
         <?=csrf('session_lock_csrf', 24)?>
         <input type="hidden" name="return_to" value="<?=esc(basic_admin_session_lock_return_url())?>">
         <label for="sessionLockPassword">Password</label>
         <input id="sessionLockPassword" name="password" type="password" autocomplete="current-password" required>
         <button type="submit">Unlock workspace <span aria-hidden="true">&rarr;</span></button>
       </form>
-      <a class="session-lock-signout" href="<?=esc(ROOT . '/logout')?>">Sign out instead</a>
+      <a class="session-lock-signout" href="<?=esc(rtrim(ROOT, '/') . '/logout')?>">Sign out instead</a>
       <p class="session-lock-footnote"><span aria-hidden="true">&#128274;</span> Your work is still here, safe and private.</p>
     </section>
   </div>

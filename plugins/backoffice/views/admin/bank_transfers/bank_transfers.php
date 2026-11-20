@@ -18,6 +18,19 @@ foreach (($bankTransfers ?? []) as $transfer) {
 asort($statusOptions);
 asort($typeOptions);
 asort($bankOptions);
+$partyStatusClass = static function (string $partyStatus): string {
+	$status = strtolower(trim($partyStatus));
+	if (in_array($status, ['approved', 'verified', 'withdrawn', 'complete', 'completed'], true)) {
+		return 'bo-party-status--success';
+	}
+	if (in_array($status, ['rejected', 'failed'], true)) {
+		return 'bo-party-status--danger';
+	}
+	if (str_contains($status, 'pending') || str_contains($status, 'waiting')) {
+		return 'bo-party-status--pending';
+	}
+	return 'bo-party-status--neutral';
+};
 ?>
 
 <style>
@@ -39,6 +52,90 @@ asort($bankOptions);
 	}
 	#bo-bank-table .wrap{
 		white-space: normal;
+	}
+	#bo-bank-table .bo-bank-parties-col{
+		min-width: 14rem;
+	}
+	#bo-bank-table .bo-party-entry{
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: center;
+		gap: .15rem .65rem;
+		padding: .3rem 0;
+	}
+	#bo-bank-table .bo-party-entry + .bo-party-entry{
+		border-top: 1px solid var(--bs-border-color-translucent, var(--bs-border-color));
+	}
+	#bo-bank-table .bo-party-role{
+		grid-column: 1 / -1;
+		color: var(--bs-secondary-color);
+		font-size: .62rem;
+		font-weight: 700;
+		letter-spacing: .06em;
+		text-transform: uppercase;
+	}
+	#bo-bank-table .bo-party-name{
+		display: block;
+		max-width: 100%;
+		min-width: 0;
+		overflow: hidden;
+		font-size: .82rem;
+		font-weight: 650;
+		text-overflow: ellipsis;
+	}
+	#bo-bank-table .bo-party-status{
+		display: inline-flex;
+		align-items: center;
+		gap: .38rem;
+		max-width: 100%;
+		margin-top: .32rem;
+		padding: .24rem .55rem;
+		border: 1px solid rgba(var(--bo-party-rgb), .24);
+		border-radius: 999px;
+		background: rgba(var(--bo-party-rgb), .09);
+		color: var(--bo-party-color);
+		font-size: .68rem;
+		font-weight: 700;
+		letter-spacing: .015em;
+		line-height: 1.15;
+		white-space: normal;
+		overflow-wrap: anywhere;
+	}
+	#bo-bank-table .bo-bank-date-status{
+		margin-top: .4rem;
+	}
+	#bo-bank-table .bo-bank-main-status{
+		margin-top: 0;
+		font-size: .68rem;
+	}
+	#bo-bank-table .bo-bank-reject-reason{
+		margin-top: .28rem;
+		color: var(--bs-danger-text-emphasis, #b02a37);
+		font-size: .72rem;
+	}
+	#bo-bank-table .bo-party-status::before{
+		width: .42rem;
+		height: .42rem;
+		flex: 0 0 .42rem;
+		border-radius: 50%;
+		background: currentColor;
+		content: "";
+	}
+	#bo-bank-table .bo-party-status--success{
+		--bo-party-rgb: var(--bs-success-rgb);
+		--bo-party-color: var(--bs-success-text-emphasis, #146c43);
+	}
+	#bo-bank-table .bo-party-status--pending{
+		--bo-party-rgb: var(--bs-warning-rgb);
+		--bo-party-color: var(--bs-warning-text-emphasis, #997404);
+	}
+	#bo-bank-table .bo-party-status--danger{
+		--bo-party-rgb: var(--bs-danger-rgb);
+		--bo-party-color: var(--bs-danger-text-emphasis, #b02a37);
+	}
+	#bo-bank-table .bo-party-status--neutral{
+		--bo-party-rgb: var(--bs-secondary-rgb);
+		--bo-party-color: var(--bs-secondary-color);
 	}
 	.bo-bank-mobile-meta{
 		display:none;
@@ -118,10 +215,7 @@ asort($bankOptions);
 			width:100%;
 		}
 		#bo-bank-table .bo-bank-index-col,
-		#bo-bank-table .bo-bank-type-col,
-		#bo-bank-table .bo-bank-second-party-col,
-		#bo-bank-table .bo-bank-third-party-col,
-		#bo-bank-table .bo-bank-status-col{
+		#bo-bank-table .bo-bank-type-col{
 			display:none;
 		}
 		#bo-bank-table .bo-bank-mobile-index{
@@ -142,19 +236,23 @@ asort($bankOptions);
 		}
 		#bo-bank-table th:nth-child(2),
 		#bo-bank-table td:nth-child(2){
-			width:28%;
+			width:24%;
 		}
 		#bo-bank-table th:nth-child(4),
 		#bo-bank-table td:nth-child(4){
-			width:34%;
+			width:22%;
 		}
 		#bo-bank-table th:nth-child(5),
 		#bo-bank-table td:nth-child(5){
-			width:19%;
+			width:14%;
 		}
-		#bo-bank-table th:nth-child(9),
-		#bo-bank-table td:nth-child(9){
-			width:19%;
+		#bo-bank-table th:nth-child(6),
+		#bo-bank-table td:nth-child(6){
+			width:25%;
+		}
+		#bo-bank-table th:nth-child(7),
+		#bo-bank-table td:nth-child(7){
+			width:15%;
 		}
 		#bo-bank-table th,
 		#bo-bank-table td{
@@ -165,6 +263,32 @@ asort($bankOptions);
 		}
 		#bo-bank-table .btn-sm{
 			padding:.25rem .45rem;
+		}
+	}
+	@media (max-width: 767.98px){
+		#bo-bank-table .bo-bank-parties-col{
+			display:none;
+		}
+		#bo-bank-table th:nth-child(2),
+		#bo-bank-table td:nth-child(2){
+			width:28%;
+		}
+		#bo-bank-table th:nth-child(4),
+		#bo-bank-table td:nth-child(4){
+			width:34%;
+		}
+		#bo-bank-table th:nth-child(5),
+		#bo-bank-table td:nth-child(5){
+			width:19%;
+		}
+		#bo-bank-table th:nth-child(7),
+		#bo-bank-table td:nth-child(7){
+			width:19%;
+		}
+	}
+	@media (min-width: 768px){
+		#bo-bank-table .bo-bank-mobile-parties{
+			display:none !important;
 		}
 	}
 	@media (max-width: 420px){
@@ -284,9 +408,7 @@ asort($bankOptions);
 				<th class="bo-bank-type-col">Type</th>
 				<th>Category / Detail</th>
 				<th>Amount</th>
-				<th class="bo-bank-second-party-col">2nd Party</th>
-				<th class="bo-bank-third-party-col">3rd Party</th>
-				<th class="bo-bank-status-col">Status</th>
+				<th class="bo-bank-parties-col">Parties</th>
 				<th>Action</th>
 			</tr>
 		</thead>
@@ -296,10 +418,6 @@ asort($bankOptions);
 					<?php
 						$status = trim((string)($row->transaction_status ?? 'Pending 2nd Party'));
 						$statusLower = strtolower($status);
-						$badgeClass = 'badge bg-secondary';
-						if ($statusLower === 'approved') $badgeClass = 'badge bg-success';
-						elseif ($statusLower === 'rejected') $badgeClass = 'badge bg-danger';
-						elseif (strpos($statusLower, 'pending') !== false) $badgeClass = 'badge bg-warning text-dark';
 						$detail = trim((string)($row->transfer_category ?? ''));
 						if ($detail === '') $detail = trim((string)($row->bank_name ?? ''));
 						if ($detail !== '' && !empty($row->network_name)) {
@@ -310,6 +428,10 @@ asort($bankOptions);
 						$thirdPartyName = trim((string)(($row->third_party_first_name ?? '') . ' ' . ($row->third_party_last_name ?? '')));
 						$withdrawerName = trim((string)(($row->withdrawer_first_name ?? '') . ' ' . ($row->withdrawer_last_name ?? '')));
 						$creatorName = trim((string)(($row->creator_first_name ?? '') . ' ' . ($row->creator_last_name ?? '')));
+						$isFromBankFlow = backoffice_bank_transfer_is_from_bank_flow((string)($row->transaction_type ?? ''));
+						$secondPartyStatus = trim((string)($row->second_party_status ?? 'Pending'));
+						$thirdPartyStatus = trim((string)($isFromBankFlow ? ($row->withdrawal_status ?? 'Pending') : ($row->third_party_status ?? 'Pending')));
+						$thirdPartyDisplayName = $isFromBankFlow ? $withdrawerName : $thirdPartyName;
 						$searchText = implode(' ', array_filter([
 							(string)($row->id ?? ''),
 							(string)($row->transaction_type ?? ''),
@@ -345,15 +467,19 @@ asort($bankOptions);
 								<i class="fa-regular fa-user me-1"></i>
 								<?=esc($creatorName !== '' ? $creatorName : 'Unknown creator')?>
 							</div>
-							<div class="bo-bank-mobile-meta">
-								<div><strong>2nd party:</strong> <?=esc($secondPartyName !== '' ? $secondPartyName : 'N/A')?></div>
-								<div><strong>3rd party:</strong>
-									<?php if(backoffice_bank_transfer_is_from_bank_flow((string)($row->transaction_type ?? ''))): ?>
-										<?=esc($withdrawerName !== '' ? $withdrawerName : 'N/A')?>
-									<?php else: ?>
-										<?=esc($thirdPartyName !== '' ? $thirdPartyName : 'N/A')?>
-									<?php endif; ?>
+							<div class="bo-bank-date-status">
+								<span class="bo-party-status bo-bank-main-status <?=$partyStatusClass($status)?>"><?=esc($status)?></span>
+								<?php if($statusLower === 'rejected' && $rejectReason !== ''): ?>
+									<div class="bo-bank-reject-reason"><i class="fa-solid fa-circle-exclamation me-1" aria-hidden="true"></i>Reason: <?=esc($rejectReason)?></div>
+								<?php endif; ?>
+							</div>
+							<div class="bo-bank-mobile-meta bo-bank-mobile-parties">
+								<div class="mb-1"><strong>2nd party:</strong> <?=esc($secondPartyName !== '' ? $secondPartyName : 'N/A')?></div>
+								<span class="bo-party-status <?=$partyStatusClass($secondPartyStatus)?>"><?=esc($secondPartyStatus)?></span>
+								<div class="mt-2 mb-1"><strong><?=$isFromBankFlow ? 'Withdrawer:' : '3rd party:'?></strong>
+									<?=esc($thirdPartyDisplayName !== '' ? $thirdPartyDisplayName : 'N/A')?>
 								</div>
+								<span class="bo-party-status <?=$partyStatusClass($thirdPartyStatus)?>"><?=esc($thirdPartyStatus)?></span>
 							</div>
 						</td>
 						<td class="wrap bo-bank-type-col"><?=esc((string)($row->transaction_type ?? ''))?></td>
@@ -362,33 +488,20 @@ asort($bankOptions);
 							<div class="small text-muted"><?=esc((string)($row->bank_name ?? ''))?></div>
 							<div class="bo-bank-mobile-meta">
 								<div><strong>Type:</strong> <?=esc((string)($row->transaction_type ?? ''))?></div>
-								<div>
-									<strong>Status:</strong> <span class="<?=$badgeClass?>"><?=esc($status)?></span>
-								</div>
-								<?php if($statusLower === 'rejected' && $rejectReason !== ''): ?>
-									<div class="text-danger">Reason: <?=esc($rejectReason)?></div>
-								<?php endif; ?>
 							</div>
 						</td>
 						<td><?=number_format((float)($row->amount ?? 0), 2)?></td>
-						<td class="wrap bo-bank-second-party-col">
-							<div><?=esc($secondPartyName)?></div>
-							<div class="small text-muted"><?=esc((string)($row->second_party_status ?? 'Pending'))?></div>
-						</td>
-						<td class="wrap bo-bank-third-party-col">
-							<?php if(backoffice_bank_transfer_is_from_bank_flow((string)($row->transaction_type ?? ''))): ?>
-								<div><?=esc($withdrawerName)?></div>
-								<div class="small text-muted"><?=esc((string)($row->withdrawal_status ?? 'Pending'))?></div>
-							<?php else: ?>
-								<div><?=esc($thirdPartyName)?></div>
-								<div class="small text-muted"><?=esc((string)($row->third_party_status ?? 'Pending'))?></div>
-							<?php endif; ?>
-						</td>
-						<td class="wrap bo-bank-status-col">
-							<span class="<?=$badgeClass?>"><?=esc($status)?></span>
-							<?php if($statusLower === 'rejected' && $rejectReason !== ''): ?>
-								<div class="small text-danger mt-1">Reason: <?=esc($rejectReason)?></div>
-							<?php endif; ?>
+						<td class="wrap bo-bank-parties-col">
+							<div class="bo-party-entry">
+								<span class="bo-party-role">2nd Party</span>
+								<span class="bo-party-name" title="<?=esc($secondPartyName !== '' ? $secondPartyName : 'Unassigned')?>"><?=esc($secondPartyName !== '' ? $secondPartyName : 'Unassigned')?></span>
+								<span class="bo-party-status <?=$partyStatusClass($secondPartyStatus)?>"><?=esc($secondPartyStatus)?></span>
+							</div>
+							<div class="bo-party-entry">
+								<span class="bo-party-role">3rd Party</span>
+								<span class="bo-party-name" title="<?=esc($thirdPartyDisplayName !== '' ? $thirdPartyDisplayName : 'Unassigned')?>"><?=esc($thirdPartyDisplayName !== '' ? $thirdPartyDisplayName : 'Unassigned')?></span>
+								<span class="bo-party-status <?=$partyStatusClass($thirdPartyStatus)?>"><?=esc($thirdPartyStatus)?></span>
+							</div>
 						</td>
 						<td>
 							<a class="btn btn-outline-secondary btn-sm" href="<?=ROOT?>/<?=$admin_route?>/<?=$plugin_route?>/view_bank_transfer/<?=esc((string)$row->id)?>">
@@ -398,11 +511,11 @@ asort($bankOptions);
 					</tr>
 				<?php endforeach; ?>
 				<tr id="bo-bank-empty-row" style="display:none;">
-					<td colspan="9" class="text-center">No TO &amp; FROM records match the current filters.</td>
+					<td colspan="7" class="text-center">No TO &amp; FROM records match the current filters.</td>
 				</tr>
 			<?php else: ?>
 				<tr id="bo-bank-empty-row">
-					<td colspan="9" class="text-center">No TO &amp; FROM records to show.</td>
+					<td colspan="7" class="text-center">No TO &amp; FROM records to show.</td>
 				</tr>
 			<?php endif; ?>
 		</tbody>

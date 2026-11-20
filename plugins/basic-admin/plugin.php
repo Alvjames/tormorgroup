@@ -44,8 +44,9 @@ if(!function_exists('basic_admin_render_session_lock_screen'))
 		$lockCss = ROOT . '/plugins/basic-admin/assets/css/session-lock.css?v=20261120-2';
 		$colorModesVersion = @filemtime(__DIR__ . '/assets/js/color-modes.js') ?: '1';
 		$colorModesJs = ROOT . '/plugins/basic-admin/assets/js/color-modes.js?v=' . rawurlencode((string)$colorModesVersion);
-		$unlockUrl = ROOT . '/admin/unlock';
-		$logoutUrl = ROOT . '/logout';
+		$rootUrl = rtrim(ROOT, '/');
+		$unlockUrl = $rootUrl . '/admin/unlock';
+		$logoutUrl = $rootUrl . '/logout';
 		if($returnTo === ''){
 			$returnTo = basic_admin_session_lock_return_url();
 		}
@@ -68,7 +69,6 @@ if(!function_exists('basic_admin_render_session_lock_screen'))
 		echo '<input type="hidden" name="return_to" value="' . esc($returnTo) . '">';
 		echo '<label for="sessionLockPassword">Password</label><input id="sessionLockPassword" name="password" type="password" autocomplete="current-password" required autofocus>';
 		echo '<button type="submit">Unlock workspace <span aria-hidden="true">&rarr;</span></button></form>';
-		echo '<script>(function(){var form=document.querySelector(".session-lock-form");if(form){form.addEventListener("submit",function(){var target=form.querySelector("input[name=return_to]");if(target)target.value=window.location.href;});}})();</script>';
 		echo '<a class="session-lock-signout" href="' . esc($logoutUrl) . '">Sign out instead</a>';
 		echo '<p class="session-lock-footnote"><span aria-hidden="true">&#128274;</span> Your work is still here, safe and private.</p>';
 		echo '</main></body></html>';

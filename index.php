@@ -49,7 +49,76 @@ add_action('before_controller', function () use ($CURRENT_PATH) {
             || stripos((string)($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json') !== false
             || strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest';
 
-        if (!$ses->is_logged_in()) {
+        $sessionUserId = (int)$ses->user('id');
+        $isLoggedIn = $ses->is_logged_in();
+        $isLocked = $isLoggedIn && $ses->is_locked();
+        $skipReturnCapture = false;
+        if (
+            ($_SERVER['REQUEST_METHOD'] ?? '') === 'GET'
+            && !$wantsJson
+            && $ses->get('session_lock_return_capture_pending') === true
+        ) {
+            $ses->pop('session_lock_return_capture_pending');
+            $skipReturnCapture = true;
+        }
+        $route = trim($CURRENT_PATH, '/');
+        if (
+            $sessionUserId > 0
+            && $isLoggedIn
+            && !$isLocked
+            && !$skipReturnCapture
+            && ($_SERVER['REQUEST_METHOD'] ?? '') === 'GET'
+            && !$wantsJson
+            && ($route === 'admin' || str_starts_with($route, 'admin/'))
+            && !in_array($route, ['admin/lock', 'admin/unlock'], true)
+        ) {
+            $returnTo = rtrim(ROOT, '/') . '/' . $route;
+            $returnParams = $_GET;
+            unset($returnParams['url']);
+            $returnQuery = http_build_query($returnParams);
+            if ($returnQuery !== '') {
+                $returnTo .= '?' . $returnQuery;
+            }
+            $ses->set('session_lock_return_to', $returnTo);
+        }
+
+        $lockedReturnTo = static function () use ($ses, $route): string {
+            $returnTo = (string)$ses->get('session_lock_return_to');
+            if ($route !== 'admin') {
+                $returnTo = rtrim(ROOT, '/') . '/' . $route;
+                $returnParams = $_GET;
+                unset($returnParams['url']);
+                $returnQuery = http_build_query($returnParams);
+                if ($returnQuery !== '') {
+                    $returnTo .= '?' . $returnQuery;
+                }
+                $ses->set('session_lock_return_to', $returnTo);
+                return $returnTo;
+            }
+
+            $referer = (string)($_SERVER['HTTP_REFERER'] ?? '');
+            $refererPath = parse_url($referer, PHP_URL_PATH);
+            if (!is_string($refererPath)) {
+                return $returnTo;
+            }
+            $refererPath = '/' . ltrim($refererPath, '/');
+            $rootUrl = rtrim(ROOT, '/');
+            $rootPath = rtrim((string)(parse_url($rootUrl, PHP_URL_PATH) ?? ''), '/');
+            $adminPath = $rootPath . '/admin';
+            if (!str_starts_with($refererPath, $adminPath . '/')) {
+                return $returnTo;
+            }
+
+            $returnTo = $rootUrl . substr($refererPath, strlen($rootPath));
+            $refererQuery = (string)(parse_url($referer, PHP_URL_QUERY) ?? '');
+            if ($refererQuery !== '') {
+                $returnTo .= '?' . $refererQuery;
+            }
+            $ses->set('session_lock_return_to', $returnTo);
+            return $returnTo;
+        };
+
+        if (!$isLoggedIn) {
             if ($isAccountStatusRequest || $wantsJson) {
                 http_response_code(401);
                 header('Content-Type: application/json');
@@ -65,7 +134,6 @@ add_action('before_controller', function () use ($CURRENT_PATH) {
             return;
         }
 
-        $isLocked = $ses->is_locked();
         if ($isAdminLockRequest) {
             header('Content-Type: application/json');
             if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !csrf_verify($_POST, 'session_lock_csrf')) {
@@ -93,7 +161,7 @@ add_action('before_controller', function () use ($CURRENT_PATH) {
             }
 
             http_response_code(423);
-            basic_admin_render_session_lock_screen();
+            basic_admin_render_session_lock_screen('', $lockedReturnTo());
             die;
         }
 
@@ -139,6 +207,7 @@ add_action('before_controller', function () use ($CURRENT_PATH) {
                         $password = (string)($_POST['password'] ?? '');
 
                         if ($password !== '' && $passwordHash !== '' && password_verify($password, $passwordHash) && $ses->unlock()) {
+                            $ses->set('session_lock_return_capture_pending', true);
                             if ($wantsJson) {
                                 header('Content-Type: application/json');
                                 echo json_encode(['success' => true, 'locked' => false]);
@@ -146,14 +215,21 @@ add_action('before_controller', function () use ($CURRENT_PATH) {
                             }
                             $returnTo = (string)($_POST['return_to'] ?? '');
                             if ($returnTo === '') {
+                                $returnTo = (string)$ses->get('session_lock_return_to');
+                            }
+                            if ($returnTo === '') {
                                 $returnTo = (string)($_SERVER['HTTP_REFERER'] ?? '');
                             }
                             $returnPath = parse_url($returnTo, PHP_URL_PATH);
+                            if (is_string($returnPath)) {
+                                $returnPath = '/' . ltrim($returnPath, '/');
+                            }
                             $returnQuery = (string)(parse_url($returnTo, PHP_URL_QUERY) ?? '');
                             $returnFragment = (string)(parse_url($returnTo, PHP_URL_FRAGMENT) ?? '');
-                            $rootPath = rtrim((string)(parse_url(ROOT, PHP_URL_PATH) ?? ''), '/');
+                            $rootUrl = rtrim(ROOT, '/');
+                            $rootPath = rtrim((string)(parse_url($rootUrl, PHP_URL_PATH) ?? ''), '/');
                             $adminPath = $rootPath . '/admin';
-                            $redirectTo = ROOT . '/admin';
+                            $redirectTo = $rootUrl . '/admin';
                             if ((!is_string($returnPath) || ($returnPath !== $adminPath && !str_starts_with($returnPath, $adminPath . '/'))) && $returnQuery !== '') {
                                 parse_str($returnQuery, $returnParams);
                                 $requestedRoute = trim((string)($returnParams['url'] ?? ''), '/');
@@ -166,7 +242,7 @@ add_action('before_controller', function () use ($CURRENT_PATH) {
                             if (is_string($returnPath) && ($returnPath === $adminPath || str_starts_with($returnPath, $adminPath . '/'))) {
                                 $relativePath = substr($returnPath, strlen($rootPath));
                                 if ($relativePath !== '/admin/unlock' && !str_starts_with($relativePath, '/admin/unlock/')) {
-                                    $redirectTo = ROOT . $relativePath;
+                                    $redirectTo = $rootUrl . $relativePath;
                                     if ($returnQuery !== '' && !preg_match('/[\r\n]/', $returnQuery)) {
                                         $redirectTo .= '?' . $returnQuery;
                                     }
@@ -210,7 +286,7 @@ add_action('before_controller', function () use ($CURRENT_PATH) {
                 }
 
                 http_response_code(423);
-                basic_admin_render_session_lock_screen();
+                basic_admin_render_session_lock_screen('', $lockedReturnTo());
                 die;
             }
 

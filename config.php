@@ -28,7 +28,7 @@ if((empty($_SERVER['SERVER_NAME']) && strpos(PHP_SAPI, 'cgi') !== 0) || (!empty(
     /** Database driver */
     define('DB_DRIVER', getenv('DB_DRIVER') ?: 'mysql');
 
-    define('ROOT', getenv('APP_ROOT') ?: 'http://localhost:8080');
+    define('ROOT', rtrim(getenv('APP_ROOT') ?: 'http://localhost:8080', '/'));
 
 }else
 {
@@ -47,7 +47,7 @@ if((empty($_SERVER['SERVER_NAME']) && strpos(PHP_SAPI, 'cgi') !== 0) || (!empty(
     /** Database driver */
     define('DB_DRIVER', getenv('DB_DRIVER') ?: 'mysql');
 
-    define('ROOT', getenv('APP_ROOT') ?: 'http://localhost:8080');
+    define('ROOT', rtrim(getenv('APP_ROOT') ?: 'http://localhost:8080', '/'));
 }
 
 // Dynamically set the App logo paths based on the ROOT directory

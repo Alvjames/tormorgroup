@@ -119,6 +119,10 @@ class Session
 		$_SESSION[$this->varKey]['login_date'] = gmdate('Y-m-d', $now);
 		$_SESSION[$this->varKey]['last_activity'] = $now;
 		unset($_SESSION[$this->varKey]['locked'], $_SESSION[$this->varKey]['locked_at']);
+		unset(
+			$_SESSION[$this->varKey]['session_lock_return_to'],
+			$_SESSION[$this->varKey]['session_lock_return_capture_pending']
+		);
 
 		return true;
 	}
@@ -242,7 +246,13 @@ class Session
 
 		if(!empty($_SESSION[$this->userKey]))
 			unset($_SESSION[$this->userKey]);
-		unset($_SESSION[$this->varKey]['locked'], $_SESSION[$this->varKey]['locked_at'], $_SESSION[$this->varKey]['last_activity']);
+		unset(
+			$_SESSION[$this->varKey]['locked'],
+			$_SESSION[$this->varKey]['locked_at'],
+			$_SESSION[$this->varKey]['last_activity'],
+			$_SESSION[$this->varKey]['session_lock_return_to'],
+			$_SESSION[$this->varKey]['session_lock_return_capture_pending']
+		);
 
 		return true;
 	}
