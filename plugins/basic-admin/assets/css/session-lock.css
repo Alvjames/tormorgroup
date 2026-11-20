@@ -1,0 +1,324 @@
+:root {
+  color-scheme: light;
+  --lock-page-bg: #edf2f8;
+  --lock-page-glow-blue: rgba(116, 164, 255, .22);
+  --lock-page-glow-teal: rgba(30, 190, 166, .16);
+  --lock-overlay-bg: rgba(14, 25, 45, .68);
+  --lock-card-bg: rgba(255, 255, 255, .98);
+  --lock-card-border: rgba(255, 255, 255, .72);
+  --lock-card-shadow: 0 32px 90px rgba(8, 21, 43, .28);
+  --lock-brand-color: #35445c;
+  --lock-icon-border: #dce8ff;
+  --lock-icon-color: #2563eb;
+  --lock-icon-bg: linear-gradient(145deg, #eff5ff, #e8f2ff);
+  --lock-icon-shadow: 0 8px 20px rgba(37, 99, 235, .12);
+  --lock-eyebrow-color: #567094;
+  --lock-heading-color: #172033;
+  --lock-copy-color: #64748b;
+  --lock-user-border: #e6ebf2;
+  --lock-user-color: #34445c;
+  --lock-error-border: #fecaca;
+  --lock-error-color: #b42318;
+  --lock-error-bg: #fff1f0;
+  --lock-input-border: #cbd5e1;
+  --lock-input-color: #172033;
+  --lock-input-bg: #fff;
+  --lock-input-focus: rgba(37, 99, 235, .16);
+  --lock-signout-color: #52647e;
+  --lock-footnote-color: #8491a4;
+}
+
+html[data-bs-theme="dark"] {
+  color-scheme: dark;
+  --lock-page-bg: #0b1220;
+  --lock-page-glow-blue: rgba(37, 99, 235, .17);
+  --lock-page-glow-teal: rgba(15, 159, 143, .12);
+  --lock-overlay-bg: rgba(2, 6, 15, .78);
+  --lock-card-bg: rgba(17, 27, 45, .98);
+  --lock-card-border: rgba(148, 163, 184, .2);
+  --lock-card-shadow: 0 32px 90px rgba(0, 0, 0, .48);
+  --lock-brand-color: #c5d0e0;
+  --lock-icon-border: rgba(96, 165, 250, .25);
+  --lock-icon-color: #8db9ff;
+  --lock-icon-bg: linear-gradient(145deg, rgba(37, 99, 235, .2), rgba(15, 159, 143, .12));
+  --lock-icon-shadow: 0 8px 24px rgba(0, 0, 0, .2);
+  --lock-eyebrow-color: #9eb4d2;
+  --lock-heading-color: #f1f5fb;
+  --lock-copy-color: #a7b4c8;
+  --lock-user-border: #334157;
+  --lock-user-color: #d7e0ed;
+  --lock-error-border: #71343d;
+  --lock-error-color: #ffb7bd;
+  --lock-error-bg: #351e27;
+  --lock-input-border: #3a4a62;
+  --lock-input-color: #edf2f8;
+  --lock-input-bg: #0d1728;
+  --lock-input-focus: rgba(96, 165, 250, .22);
+  --lock-signout-color: #b3c1d5;
+  --lock-footnote-color: #8a9ab1;
+}
+
+.session-lock-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 1.5rem;
+  margin: 0;
+  color: var(--lock-heading-color);
+  background:
+    radial-gradient(ellipse at 12% 12%, var(--lock-page-glow-blue), transparent 35%),
+    radial-gradient(ellipse at 88% 84%, var(--lock-page-glow-teal), transparent 32%),
+    var(--lock-page-bg);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.session-lock-page *,
+.session-lock-backdrop * {
+  box-sizing: border-box;
+}
+
+.session-lock-backdrop[hidden] {
+  display: none !important;
+}
+
+.session-lock-backdrop {
+  position: fixed;
+  z-index: 2147483000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  padding: 1.25rem;
+  background: var(--lock-overlay-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.session-lock-card {
+  position: relative;
+  width: min(100%, 440px);
+  overflow: hidden;
+  padding: clamp(1.75rem, 6vw, 2.75rem);
+  border: 1px solid var(--lock-card-border);
+  border-radius: 1.5rem;
+  background: var(--lock-card-bg);
+  box-shadow: var(--lock-card-shadow);
+  text-align: center;
+}
+
+.session-lock-card::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 5px;
+  background: linear-gradient(90deg, #2563eb, #12a594, #8b5cf6);
+  content: "";
+}
+
+.session-lock-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .65rem;
+  margin-bottom: 2rem;
+  color: var(--lock-brand-color);
+  font-size: .82rem;
+  font-weight: 750;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.session-lock-brand img {
+  width: 2rem;
+  height: 2rem;
+  object-fit: contain;
+}
+
+.session-lock-icon {
+  display: grid;
+  width: 4.25rem;
+  height: 4.25rem;
+  place-items: center;
+  margin: 0 auto 1.25rem;
+  border: 1px solid var(--lock-icon-border);
+  border-radius: 1.35rem;
+  color: var(--lock-icon-color);
+  background: var(--lock-icon-bg);
+  box-shadow: var(--lock-icon-shadow);
+}
+
+.session-lock-icon svg {
+  width: 2rem;
+  height: 2rem;
+}
+
+.session-lock-eyebrow {
+  margin: 0 0 .45rem;
+  color: var(--lock-eyebrow-color);
+  font-size: .68rem;
+  font-weight: 800;
+  letter-spacing: .16em;
+}
+
+.session-lock-card h1 {
+  margin: 0;
+  color: var(--lock-heading-color);
+  font-size: clamp(1.65rem, 6vw, 2rem);
+  font-weight: 760;
+  letter-spacing: -.045em;
+}
+
+.session-lock-copy {
+  max-width: 20rem;
+  margin: .7rem auto 1.35rem;
+  color: var(--lock-copy-color);
+  font-size: .91rem;
+  line-height: 1.6;
+}
+
+.session-lock-user {
+  display: inline-flex;
+  align-items: center;
+  gap: .65rem;
+  max-width: 100%;
+  margin: 0 auto 1.4rem;
+  padding: .4rem .8rem .4rem .4rem;
+  border: 1px solid var(--lock-user-border);
+  border-radius: 999px;
+  color: var(--lock-user-color);
+  font-size: .83rem;
+  font-weight: 700;
+}
+
+.session-lock-avatar {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 2rem;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: linear-gradient(145deg, #2563eb, #12a594);
+  font-size: .72rem;
+  font-weight: 800;
+}
+
+.session-lock-user > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-lock-error {
+  margin: 0 0 1rem;
+  padding: .7rem .8rem;
+  border: 1px solid var(--lock-error-border);
+  border-radius: .75rem;
+  color: var(--lock-error-color);
+  background: var(--lock-error-bg);
+  font-size: .82rem;
+  text-align: left;
+}
+
+.session-lock-form {
+  text-align: left;
+}
+
+.session-lock-form label {
+  display: block;
+  margin: 0 0 .45rem;
+  color: var(--lock-user-color);
+  font-size: .78rem;
+  font-weight: 750;
+}
+
+.session-lock-form input {
+  width: 100%;
+  min-height: 3.15rem;
+  padding: .75rem .9rem;
+  border: 1px solid var(--lock-input-border);
+  border-radius: .8rem;
+  outline: none;
+  color: var(--lock-input-color);
+  background: var(--lock-input-bg);
+  font: inherit;
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+
+.session-lock-form input:focus {
+  border-color: #3478f6;
+  box-shadow: 0 0 0 .22rem var(--lock-input-focus);
+}
+
+.session-lock-form button {
+  display: flex;
+  width: 100%;
+  min-height: 3.15rem;
+  align-items: center;
+  justify-content: center;
+  gap: .6rem;
+  margin-top: .8rem;
+  border: 0;
+  border-radius: .8rem;
+  color: #fff;
+  background: linear-gradient(100deg, #245fe0, #167fba);
+  box-shadow: 0 9px 18px rgba(37, 99, 235, .2);
+  cursor: pointer;
+  font: inherit;
+  font-size: .9rem;
+  font-weight: 750;
+  transition: transform .16s ease, box-shadow .16s ease;
+}
+
+.session-lock-form button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(37, 99, 235, .28);
+}
+
+.session-lock-form button:focus-visible,
+.session-lock-signout:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, .32);
+  outline-offset: 3px;
+}
+
+.session-lock-signout {
+  display: inline-block;
+  margin-top: 1.15rem;
+  color: var(--lock-signout-color);
+  font-size: .82rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.session-lock-signout:hover {
+  color: #174ea6;
+  text-decoration: underline;
+}
+
+.session-lock-footnote {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  margin: 1.5rem 0 0;
+  color: var(--lock-footnote-color);
+  font-size: .72rem;
+}
+
+@media (max-width: 480px) {
+  .session-lock-page {
+    padding: .85rem;
+  }
+
+  .session-lock-card {
+    border-radius: 1.15rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-lock-form input,
+  .session-lock-form button {
+    transition: none;
+  }
+}
