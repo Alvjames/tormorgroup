@@ -41,9 +41,11 @@ if(!function_exists('basic_admin_render_session_lock_screen'))
 			$initials .= strtoupper(substr($part, 0, 1));
 		}
 
-		$lockCss = ROOT . '/plugins/basic-admin/assets/css/session-lock.css?v=20261120-2';
+		$lockCss = ROOT . '/plugins/basic-admin/assets/css/session-lock.css?v=20261121-1';
 		$colorModesVersion = @filemtime(__DIR__ . '/assets/js/color-modes.js') ?: '1';
 		$colorModesJs = ROOT . '/plugins/basic-admin/assets/js/color-modes.js?v=' . rawurlencode((string)$colorModesVersion);
+		$passwordToggleVersion = @filemtime(__DIR__ . '/assets/js/session-lock.js') ?: '1';
+		$passwordToggleJs = ROOT . '/plugins/basic-admin/assets/js/session-lock.js?v=' . rawurlencode((string)$passwordToggleVersion);
 		$rootUrl = rtrim(ROOT, '/');
 		$unlockUrl = $rootUrl . '/admin/unlock';
 		$logoutUrl = $rootUrl . '/logout';
@@ -67,11 +69,12 @@ if(!function_exists('basic_admin_render_session_lock_screen'))
 		echo '<form class="session-lock-form" method="post" action="' . esc($unlockUrl) . '">';
 		echo $csrfField;
 		echo '<input type="hidden" name="return_to" value="' . esc($returnTo) . '">';
-		echo '<label for="sessionLockPassword">Password</label><input id="sessionLockPassword" name="password" type="password" autocomplete="current-password" required autofocus>';
-		echo '<button type="submit">Unlock workspace <span aria-hidden="true">&rarr;</span></button></form>';
+		echo '<label for="sessionLockPassword">Password</label><div class="session-lock-password-field"><input id="sessionLockPassword" name="password" type="password" autocomplete="current-password" required autofocus>';
+		echo '<button class="session-lock-password-toggle" type="button" aria-label="Show password" aria-pressed="false" aria-controls="sessionLockPassword">Show</button></div>';
+		echo '<button class="session-lock-submit" type="submit">Unlock workspace <span aria-hidden="true">&rarr;</span></button></form>';
 		echo '<a class="session-lock-signout" href="' . esc($logoutUrl) . '">Sign out instead</a>';
 		echo '<p class="session-lock-footnote"><span aria-hidden="true">&#128274;</span> Your work is still here, safe and private.</p>';
-		echo '</main></body></html>';
+		echo '</main><script src="' . esc($passwordToggleJs) . '"></script></body></html>';
 	}
 }
 
