@@ -689,7 +689,7 @@
 								'Ecobank',
 								'Fidelity Bank',
 								'First National Bank (FNB)',
-								'First Bank Nigeria (FBN)',
+								'First Bank National (FBN)',
 								'First Bank Ghana (FBG)',
 								'GCB Bank',
 								'GT Bank',
@@ -700,7 +700,7 @@
 							$placeholders = [];
 							$idx = 0;
 							foreach ($bankNetworkNames as $name) {
-								$key = $name === 'First Bank Nigeria (FBN)'
+								$key = $name === 'First Bank National (FBN)'
 									? 'ECASH_FBN'
 									: 'ECASH_' . strtoupper(preg_replace('/[^A-Z0-9]+/i', '_', (string)$name));
 								$key = trim($key, '_');
@@ -1164,7 +1164,7 @@
 				{ name: 'Ecobank', icon: '🏦', color: '#D1C4E9', shared: true, group: 'shared' },
 				{ name: 'Fidelity Bank', icon: '🏦', color: '#D1C4E9', shared: true, group: 'shared' },
 				{ name: 'First National Bank (FNB)', icon: '🏦', color: '#D1C4E9', shared: true, group: 'shared' },
-				{ name: 'First Bank Nigeria (FBN)', icon: '🏦', color: '#D1C4E9', shared: true, group: 'shared' },
+				{ name: 'First Bank National (FBN)', icon: '🏦', color: '#D1C4E9', shared: true, group: 'shared' },
 				{ name: 'First Bank Ghana (FBG)', icon: '🏦', color: '#D1C4E9', shared: true, group: 'shared' },
 				{ name: 'GCB Bank', icon: '🏦', color: '#D1C4E9', shared: true, group: 'shared' },
 				{ name: 'GT Bank', icon: '🏦', color: '#D1C4E9', shared: true, group: 'shared' },
@@ -1284,7 +1284,7 @@
 		const ecashChannelKey = (name) => {
 			let slug = String(name || '').trim().toUpperCase()
 				.replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'CUSTOM';
-			if (slug === 'FIRST_BANK_NIGERIA_FBN') slug = 'FBN';
+			if (slug === 'FIRST_BANK_NATIONAL_FBN') slug = 'FBN';
 			return 'ECASH_' + slug;
 		};
 
@@ -1819,7 +1819,7 @@
 			const buildSlug = (name) => {
 				let slug = name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 				if (!slug) slug = 'CUSTOM';
-				if (slug === 'FIRST_BANK_NIGERIA_FBN') slug = 'FBN';
+				if (slug === 'FIRST_BANK_NATIONAL_FBN') slug = 'FBN';
 				if (slugCounts[slug]) {
 					slugCounts[slug] += 1;
 					slug = `${slug}_${slugCounts[slug]}`;

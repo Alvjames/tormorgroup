@@ -17,7 +17,7 @@ if (!function_exists('users_manager_shared_account_catalog')) {
 			'ECOBANK' => ['label' => 'Ecobank', 'aliases' => ['ECOBANK', 'ECOBANK BANK']],
 			'FIDELITY' => ['label' => 'Fidelity Bank', 'aliases' => ['FIDELITY', 'FIDELITY BANK']],
 			'FNB' => ['label' => 'First National Bank (FNB)', 'aliases' => ['FNB', 'FNB BANK', 'FIRST NATIONAL BANK', 'FIRST NATIONAL BANK FNB']],
-			'FBN' => ['label' => 'First Bank Nigeria (FBN)', 'aliases' => ['FBN', 'FBN BANK', 'FIRST BANK NIGERIA', 'FIRST BANK NIGERIA FBN']],
+			'FBN' => ['label' => 'First Bank National (FBN)', 'aliases' => ['FBN', 'FBN BANK', 'FIRST BANK NATIONAL', 'FIRST BANK NATIONAL FBN']],
 			'FBG' => ['label' => 'First Bank Ghana (FBG)', 'aliases' => ['FBG', 'FBG BANK', 'FIRST BANK GHANA', 'FIRST BANK GHANA FBG']],
 			'GCB' => ['label' => 'GCB Bank', 'aliases' => ['GCB', 'GCB BANK']],
 			'GTBANK' => ['label' => 'GTBank', 'aliases' => ['GT', 'GT BANK', 'GTBANK', 'GTBANK BANK']],

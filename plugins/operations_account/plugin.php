@@ -876,7 +876,7 @@ if(!function_exists('operations_account_is_bank_channel_key')){
 			'ACCESS', 'ACCESSBANK', 'CAL', 'CALBANK', 'ECOBANK',
 			'GCB', 'GCBBANK', 'GT', 'GTBANK', 'STANBIC', 'STANBICBANK',
 			'FIRSTNATIONALBANK', 'FIRSTNATIONALBANKFNB', 'FNB', 'FNBBANK',
-			'FBN', 'FBNBANK', 'FIRSTBANKNIGERIA',
+			'FBN', 'FBNBANK', 'FIRSTBANKNATIONAL', 'FIRSTBANKNATIONALFBN',
 			'FIRSTBANKGHANA', 'FIRSTBANKGHANAFBG', 'FBG', 'FBGBANK',
 		];
 		return in_array($compact, $aliases, true);

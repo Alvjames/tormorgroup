@@ -4,6 +4,8 @@
   $featherJsUrl = app_http_path('assets/js/feather.min.js') . '?v=' . rawurlencode((string)$featherJsVersion);
   $colorModesJsVersion = @filemtime(__DIR__ . '/../assets/js/color-modes.js') ?: '1';
   $colorModesJsUrl = plugin_http_path('assets/js/color-modes.js') . '?v=' . rawurlencode((string)$colorModesJsVersion);
+  $sessionLockJsVersion = @filemtime(__DIR__ . '/../assets/js/session-lock.js') ?: '1';
+  $sessionLockJsUrl = plugin_http_path('assets/js/session-lock.js') . '?v=' . rawurlencode((string)$sessionLockJsVersion);
   $__mobileDocumentScrollPage = in_array((string)(URL(1) ?? ''), ['agencybanking', 'airtimebundle', 'attendance', 'cashpickup', 'cfa', 'ezwich', 'logs', 'momoremit', 'payment_services', 'payments', 'pettycash', 'sims', 'tickets', 'users'], true);
 ?>
 <!DOCTYPE html>
@@ -29,6 +31,105 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <style>
+    .basic-admin-swal-container {
+      padding: 1rem;
+      backdrop-filter: blur(6px);
+    }
+
+    html[data-bs-theme="light"] .basic-admin-swal-container,
+    html:not([data-bs-theme="dark"]) .basic-admin-swal-container {
+      background: rgba(15, 23, 42, 0.42) !important;
+    }
+
+    html[data-bs-theme="dark"] .basic-admin-swal-container {
+      background: rgba(2, 6, 23, 0.72) !important;
+    }
+
+    .basic-admin-swal {
+      width: min(30rem, calc(100vw - 2rem));
+      padding: 1.5rem;
+      border: 1px solid color-mix(in srgb, var(--bs-border-color, #dee2e6) 75%, transparent);
+      border-radius: 1.125rem;
+      box-shadow: 0 24px 70px rgba(2, 6, 23, 0.24);
+    }
+
+    .basic-admin-swal__title {
+      margin-top: 0.85rem;
+      font-size: 1.25rem;
+      font-weight: 750;
+      letter-spacing: -0.025em;
+    }
+
+    .basic-admin-swal__content {
+      max-width: 24rem;
+      margin: 0.45rem auto 0;
+      color: var(--bs-secondary-color, #64748b);
+      font-size: 0.95rem;
+      line-height: 1.6;
+      overflow-wrap: anywhere;
+    }
+
+    .basic-admin-swal__actions {
+      gap: 0.65rem;
+      margin-top: 1.5rem;
+    }
+
+    .basic-admin-swal__button {
+      min-height: 2.7rem;
+      margin: 0 !important;
+      padding: 0.65rem 1.1rem;
+      border: 1px solid transparent;
+      border-radius: 0.7rem;
+      font-size: 0.9rem;
+      font-weight: 650;
+      transition: transform 140ms ease, filter 140ms ease, box-shadow 140ms ease;
+    }
+
+    .basic-admin-swal__button:hover {
+      filter: brightness(1.06);
+      transform: translateY(-1px);
+    }
+
+    .basic-admin-swal__button:focus-visible {
+      outline: 3px solid rgba(59, 130, 246, 0.35);
+      outline-offset: 2px;
+      box-shadow: none;
+    }
+
+    .basic-admin-swal__button--confirm {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: #fff;
+    }
+
+    .basic-admin-swal__button--cancel {
+      border-color: var(--bs-border-color, #dee2e6);
+      background: var(--bs-tertiary-bg, #f1f5f9);
+      color: var(--bs-body-color, #334155);
+    }
+
+    .basic-admin-swal__close {
+      color: var(--bs-secondary-color, #64748b);
+    }
+
+    @media (max-width: 480px) {
+      .basic-admin-swal {
+        padding: 1.25rem;
+      }
+
+      .basic-admin-swal__actions {
+        flex-direction: column-reverse;
+      }
+
+      .basic-admin-swal__button {
+        width: 100%;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .basic-admin-swal__button {
+        transition: none;
+      }
+    }
 
     .bd-placeholder-img {
       font-size: 1.125rem;
@@ -2174,6 +2275,66 @@
   <link href="<?=plugin_http_path('assets/css/dashboard.css')?>" rel="stylesheet">
 
 <script>
+  window.basicAdminSwalTheme = function(){
+    const root = document.documentElement;
+    const theme = String(root.getAttribute('data-bs-theme') || '').toLowerCase();
+    const isDark = theme === 'dark'
+      || (theme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    const styles = window.getComputedStyle(root);
+    const cssColor = function(name, fallback){
+      const value = styles.getPropertyValue(name).trim();
+      return value || fallback;
+    };
+    return {
+      background: cssColor('--bs-body-bg', isDark ? '#1e293b' : '#ffffff'),
+      color: cssColor('--bs-body-color', isDark ? '#f8fafc' : '#1e293b'),
+      buttonsStyling: false,
+      customClass: {
+        container: 'basic-admin-swal-container',
+        popup: 'basic-admin-swal',
+        title: 'basic-admin-swal__title',
+        htmlContainer: 'basic-admin-swal__content',
+        actions: 'basic-admin-swal__actions',
+        confirmButton: 'basic-admin-swal__button basic-admin-swal__button--confirm',
+        cancelButton: 'basic-admin-swal__button basic-admin-swal__button--cancel',
+        closeButton: 'basic-admin-swal__close'
+      }
+    };
+  };
+  window.basicAdminSwalAlert = function(title, text, icon){
+    if(!window.Swal) return alert(String(text || title || ''));
+    const theme = window.basicAdminSwalTheme();
+    return window.Swal.fire(Object.assign({
+      title: title || '',
+      text: text || '',
+      icon: icon || 'info',
+      didOpen: function(){
+        const container = window.Swal.getContainer && window.Swal.getContainer();
+        if(container) container.style.zIndex = '20000';
+      }
+    }, theme));
+  };
+  window.basicAdminSwalConfirm = function(text, title){
+    if(!window.Swal) return Promise.resolve(confirm(String(text || 'Are you sure?')));
+    const theme = window.basicAdminSwalTheme();
+    return window.Swal.fire(Object.assign({
+      title: title || 'Confirm',
+      text: text || 'Are you sure?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Yes',
+      cancelButtonText: 'Cancel',
+      didOpen: function(){
+        const container = window.Swal.getContainer && window.Swal.getContainer();
+        if(container) container.style.zIndex = '20000';
+      }
+    }, theme)).then(function(result){
+      return !!(result && result.isConfirmed);
+    });
+  };
+</script>
+
+<script>
   (function(){
     const root = document.documentElement;
     let loadingMessageTimer = null;
@@ -2926,7 +3087,8 @@
                 if (typeof window.basicAdminSwalAlert === 'function') {
                   window.basicAdminSwalAlert(title, text, icon);
                 } else if (window.Swal && typeof window.Swal.fire === 'function') {
-                  window.Swal.fire({ icon: icon, title: title, text: text, confirmButtonText: 'OK' });
+                  var theme = typeof window.basicAdminSwalTheme === 'function' ? window.basicAdminSwalTheme() : {};
+                  window.Swal.fire(Object.assign({ icon: icon, title: title, text: text, confirmButtonText: 'OK' }, theme));
                 } else {
                   window.alert(text);
                 }
@@ -2938,7 +3100,12 @@
                   var linksHtml = whatsappLinks.map(function(item, index){
                     return '<a class="btn btn-success btn-sm m-1" target="_blank" rel="noopener" href="' + item.url + '">Open WhatsApp</a>';
                   }).join('');
-                  window.Swal.fire({ icon: 'info', title: 'WhatsApp message ready', html: '<p>' + escapeWhatsappHtml(whatsappText) + '</p><div>' + linksHtml + '</div>' });
+                  var theme = typeof window.basicAdminSwalTheme === 'function' ? window.basicAdminSwalTheme() : {};
+                  window.Swal.fire(Object.assign({
+                    icon: 'info',
+                    title: 'WhatsApp message ready',
+                    html: '<p>' + escapeWhatsappHtml(whatsappText) + '</p><div>' + linksHtml + '</div>'
+                  }, theme));
                 } else {
                   showMessage(whatsappFailed > 0 ? 'error' : 'warning', 'WhatsApp notification', whatsappText);
                 }
@@ -3452,14 +3619,18 @@
         <?=csrf('session_lock_csrf', 24)?>
         <input type="hidden" name="return_to" value="<?=esc(basic_admin_session_lock_return_url())?>">
         <label for="sessionLockPassword">Password</label>
-        <input id="sessionLockPassword" name="password" type="password" autocomplete="current-password" required>
-        <button type="submit">Unlock workspace <span aria-hidden="true">&rarr;</span></button>
+        <div class="session-lock-password-field">
+          <input id="sessionLockPassword" name="password" type="password" autocomplete="current-password" required>
+          <button class="session-lock-password-toggle" type="button" aria-label="Show password" aria-pressed="false" aria-controls="sessionLockPassword">Show</button>
+        </div>
+        <button class="session-lock-submit" type="submit">Unlock workspace <span aria-hidden="true">&rarr;</span></button>
       </form>
       <a class="session-lock-signout" href="<?=esc(rtrim(ROOT, '/') . '/logout')?>">Sign out instead</a>
       <p class="session-lock-footnote"><span aria-hidden="true">&#128274;</span> Your work is still here, safe and private.</p>
     </section>
   </div>
 
+  <script src="<?=esc($sessionLockJsUrl)?>"></script>
   <script>
   window.tormorAccountAccessGuard = {
     statusUrl: <?=json_encode(ROOT . '/index.php?url=account-status')?>,
@@ -4156,58 +4327,6 @@
     xhr.send(JSON.stringify({action: 'view-drawer', userId: uid}));
   };
 
-  window.basicAdminSwalTheme = function(){
-    const root = document.documentElement;
-    const theme = String(root.getAttribute('data-bs-theme') || '').toLowerCase();
-    const isDark = theme === 'dark';
-    const styles = window.getComputedStyle(root);
-    const cssColor = function(name, fallback){
-      const value = styles.getPropertyValue(name).trim();
-      return value || fallback;
-    };
-    return {
-      background: cssColor('--bg-color', cssColor('--bs-body-bg', isDark ? '#212529' : '#ffffff')),
-      color: cssColor('--text-color', cssColor('--bs-body-color', isDark ? '#f8f9fa' : '#212529')),
-      confirmButtonColor: '#2563eb',
-      cancelButtonColor: isDark ? '#6c757d' : '#6b7280'
-    };
-  };
-  window.basicAdminSwalAlert = function(title, text, icon){
-    if(!window.Swal) return alert(String(text || title || ''));
-    const theme = window.basicAdminSwalTheme ? window.basicAdminSwalTheme() : {};
-    return Swal.fire(Object.assign({
-      title: title || '',
-      text: text || '',
-      icon: icon || 'info',
-      didOpen: function(){
-        try{
-          const c = Swal.getContainer && Swal.getContainer();
-          if(c) c.style.zIndex = '20000';
-        }catch(e){}
-      }
-    }, theme));
-  };
-  window.basicAdminSwalConfirm = function(text, title){
-    if(!window.Swal) return Promise.resolve(confirm(String(text || 'Are you sure?')));
-    const theme = window.basicAdminSwalTheme ? window.basicAdminSwalTheme() : {};
-    return Swal.fire(Object.assign({
-      title: title || 'Confirm',
-      text: text || 'Are you sure?',
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: 'Yes',
-      cancelButtonText: 'Cancel',
-      didOpen: function(){
-        try{
-          const c = Swal.getContainer && Swal.getContainer();
-          if(c) c.style.zIndex = '20000';
-        }catch(e){}
-      }
-    }, theme)).then(function(r){
-      return !!(r && r.isConfirmed);
-    });
-  };
-
   (function(){
     if (window.basicAdminSubmitProgress) return;
 
@@ -4557,7 +4676,7 @@
       GT: 'GTBANK', GT_BANK: 'GTBANK', GTBANK: 'GTBANK', GTBANK_BANK: 'GTBANK',
       STANBIC: 'STANBIC', STANBIC_BANK: 'STANBIC',
       FNB: 'FNB', FNB_BANK: 'FNB', FIRST_NATIONAL_BANK: 'FNB', FIRST_NATIONAL_BANK_FNB: 'FNB',
-      FBN: 'FBN', FBN_BANK: 'FBN', FIRST_BANK_NIGERIA: 'FBN',
+      FBN: 'FBN', FBN_BANK: 'FBN', FIRST_BANK_NATIONAL: 'FBN', FIRST_BANK_NATIONAL_FBN: 'FBN',
       FBG: 'FBG', FBG_BANK: 'FBG', FIRST_BANK_GHANA: 'FBG', FIRST_BANK_GHANA_FBG: 'FBG',
       APEX_NAFANA: 'APEX_NAFANA', APEX_NAFANA_BANK: 'APEX_NAFANA', NAFANA_RURAL_BANK: 'APEX_NAFANA', NAFANA_BANK: 'APEX_NAFANA',
       APEX_SUMA: 'APEX_SUMA', APEX_SUMA_BANK: 'APEX_SUMA', SUMA_RURAL_BANK: 'APEX_SUMA', SUMA_BANK: 'APEX_SUMA'
@@ -4673,7 +4792,7 @@
         MTN_EVD: 'MTN EVD',
         GTBANK: 'GTBank',
         FNB: 'FNB',
-        FBN: 'FBN'
+        FBN: 'First Bank National (FBN)'
       };
       return labels[canonical] || canonical.replace(/_/g, ' ');
     }
