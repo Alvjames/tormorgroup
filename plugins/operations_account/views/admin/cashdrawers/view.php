@@ -610,6 +610,30 @@ window.toggleDenoHistoryModal = function() {
                     <?php endif; ?>
                 </div>
 
+                <?php if (!empty($bank_transfer_history)): ?>
+                    <div class="mb-3">
+                        <h6 class="mb-2" style="font-weight:600;">🏦 To &amp; From Bank Transactions</h6>
+                        <?php foreach ($bank_transfer_history as $transfer): ?>
+                            <?php
+                                $transferType = trim((string)($transfer['transaction_type'] ?? 'Bank Transfer'));
+                                $transferDirection = strtolower((string)($transfer['direction'] ?? '')) === 'in' ? 'Received' : 'Sent';
+                                $transferChannel = trim(str_replace('_', ' ', preg_replace('/^ECASH_/i', '', (string)($transfer['channel_key'] ?? ''))));
+                            ?>
+                            <div class="transaction-item mb-2" style="padding:10px; border:1px solid var(--bs-border-color); border-radius:8px;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                                    <span class="transaction-status status-pending"><?= esc((string)($transfer['trans_status'] ?? 'Approved')) ?></span>
+                                    <span style="font-size:12px; color:var(--text-secondary);"><?= esc((string)($transfer['date_created'] ?? '')) ?></span>
+                                </div>
+                                <div class="transaction-details" style="margin-top:6px;">
+                                    <strong>TX #<?= esc((string)($transfer['trans_id'] ?? '')) ?></strong><br>
+                                    <?= esc($transferType) ?> · <?= esc($transferDirection) ?> · <?= esc($transferChannel) ?><br>
+                                    GHS <?= number_format((float)($transfer['amount'] ?? 0), 2) ?>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+
                 <?php $cashdrawerEditHistory = $cashdrawer_edit_history ?? []; ?>
                 <div class="mb-3">
                     <h6 class="mb-2" style="font-weight:600;">Cashdrawer Edit History</h6>
@@ -1015,14 +1039,14 @@ window.toggleDenoHistoryModal = function() {
         <?php 
         if (!empty($ecash_channels)):
             foreach ($ecash_channels as $channel):
-                if (in_array($channel->trans_status ?? 'Sent', ['Approved', 'Sent', 'Pending', 'Draft', 'Opening Snapshot'])):
+                $isSharedAccount = !empty($channel->is_shared_account);
+                if ($isSharedAccount || in_array($channel->trans_status ?? 'Sent', ['Approved', 'Sent', 'Pending', 'Draft', 'Opening Snapshot'])):
                     $ob = (float)($channel->opening_balance ?? 0);
                     $cr = (float)($channel->credit ?? 0);
                     $dbt = (float)($channel->debit ?? 0);
                     $cb = (float)($channel->closing_balance ?? 0);
                     $hasAnyValue = (abs($ob) > 0.000001) || (abs($cr) > 0.000001) || (abs($dbt) > 0.000001) || (abs($cb) > 0.000001);
-                    if(!$hasAnyValue) continue;
-                    $isSharedAccount = !empty($channel->is_shared_account);
+                    if ($isSharedAccount ? abs($cb) <= 0.000001 : !$hasAnyValue) continue;
                     $channelKey = (string)($channel->channel_key ?? 'ECASH');
                     $channelLabel = preg_replace('/^ECASH[_-]*/i', '', $channelKey);
                     $channelLabel = str_replace(['_', '-'], ' ', $channelLabel);

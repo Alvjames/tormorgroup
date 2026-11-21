@@ -506,7 +506,8 @@ else:
 				}
 
 				$pendingRows = $db->query(
-					"SELECT DISTINCT cp.id, cp.customer_id, cp.transaction_side, cp.assigned_user_id, cp.date_created,
+					"SELECT DISTINCT cp.id, cp.customer_id, cp.transaction_side, cp.assigned_user_id, cp.created_by,
+					        cp.source, cp.credit_mode, cp.approval_status, cp.transaction_status, cp.date_created,
 					        cp.amount_paid_out, cp.amount_involved, cp.pickup_charge,
 					        u.first_name AS assigned_first_name,
 					        u.last_name AS assigned_last_name
@@ -536,7 +537,15 @@ else:
 						continue;
 					}
 					$assignedUserId = (int)($pendingRow->assigned_user_id ?? 0);
+					$createdById = (int)($pendingRow->created_by ?? 0);
 					$side = strtolower(trim((string)($pendingRow->transaction_side ?? '')));
+					$approval = strtolower(trim((string)($pendingRow->approval_status ?? '')));
+					$transactionStatus = strtolower(trim((string)($pendingRow->transaction_status ?? '')));
+					$isCreditPayout = $side === 'receive'
+						&& strtolower(trim((string)($pendingRow->credit_mode ?? ''))) === 'credit'
+						&& $transactionStatus === 'pending payout';
+					$isManagementReview = !$isCreditPayout
+						&& (in_array($approval, ['pending', 'draft'], true) || str_starts_with($transactionStatus, 'pending'));
 					$firstName = trim((string)($pendingRow->assigned_first_name ?? ''));
 					$lastName = trim((string)($pendingRow->assigned_last_name ?? ''));
 					$amount = $side === 'pay'
@@ -545,7 +554,10 @@ else:
 					$pendingTaskSummaries[$customerId][] = [
 						'side' => $side,
 						'user_id' => $assignedUserId,
+						'created_by' => $createdById,
 						'id' => (int)($pendingRow->id ?? 0),
+						'source' => (string)($pendingRow->source ?? ''),
+						'is_management_review' => $isManagementReview,
 						'amount' => $amount,
 						'name' => $assignedUserId > 0
 							? (trim($firstName . ' ' . $lastName) ?: 'User #' . $assignedUserId)
@@ -593,17 +605,22 @@ else:
 			}
 
 			foreach ($pendingTaskSummaries[$customerId] ?? [] as $pendingTask) {
-				if (!$canReviewCustomers && (int)$pendingTask['user_id'] !== $sessionUserId) {
+				$isCreatorStatus = !$canReviewCustomers
+					&& !empty($pendingTask['is_management_review'])
+					&& $sessionUserId > 0
+					&& (int)($pendingTask['created_by'] ?? 0) === $sessionUserId;
+				if (!$canReviewCustomers && !$isCreatorStatus && (int)$pendingTask['user_id'] !== $sessionUserId) {
 					continue;
 				}
 				$sideLabel = $pendingTask['side'] === 'pay'
-					? 'Payout'
+					? (strtolower(trim((string)($pendingTask['source'] ?? ''))) === 'customer_withdrawal' ? 'Withdrawal' : 'Payout')
 					: ($pendingTask['side'] === 'receive' ? 'Deposit' : 'Transaction');
 				$amount = max(0.0, (float)$pendingTask['amount']);
 				$items[] = [
-					'task' => $sideLabel . ' GH₵ ' . number_format($amount, 2) . ' is awaiting review.',
-					'assignee' => $pendingTask['name'],
-					'action' => 'review_transaction',
+					'task' => $sideLabel . ' GH₵ ' . number_format($amount, 2) . ' is '
+						. (!empty($pendingTask['is_management_review']) ? 'awaiting management review.' : 'pending.'),
+					'assignee' => $isCreatorStatus ? 'Management review' : $pendingTask['name'],
+					'action' => $isCreatorStatus ? 'status_only' : 'review_transaction',
 					'transaction_id' => (int)$pendingTask['id'],
 				];
 			}
@@ -753,9 +770,16 @@ else:
 		if (empty($attention['items'])) {
 			return;
 		}
+		$statusOnly = count(array_filter(
+			$attention['items'],
+			static fn($item) => ($item['action'] ?? '') !== 'status_only'
+		)) === 0;
 		?>
-		<div class="alert alert-warning border-warning-subtle py-2 px-3 mt-2 mb-0 text-start">
-			<div class="fw-semibold small mb-1"><i class="fa-solid fa-triangle-exclamation me-1"></i>Attention — next step</div>
+		<div class="alert <?=$statusOnly ? 'alert-info border-info-subtle' : 'alert-warning border-warning-subtle'?> py-2 px-3 mt-2 mb-0 text-start">
+			<div class="fw-semibold small mb-1">
+				<i class="fa-solid <?=$statusOnly ? 'fa-circle-info' : 'fa-triangle-exclamation'?> me-1"></i>
+				<?=$statusOnly ? 'Transaction status' : 'Attention — next step'?>
+			</div>
 			<ul class="small mb-1 ps-3">
 				<?php foreach($attention['items'] as $item): ?>
 					<li class="d-flex flex-wrap align-items-center gap-2 mb-1">

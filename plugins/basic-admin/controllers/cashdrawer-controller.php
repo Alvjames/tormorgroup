@@ -215,34 +215,14 @@ try {
         $isAgentExchangeUser = !$canUseSharedAccounts
             && (user_can('add_cashpickup') || in_array('agent', $sessionRolesLower, true));
 
-        $bankAccountKeys = [
-            'ADB', 'ADB_BANK',
-            'ABSA', 'ABSA_BANK', 'ABSA_FORMERLY_BARCLAYS', 'ABSA_FORMERLY_BARCLAYS_BANK', 'BARCLAYS', 'BARCLAYS_BANK',
-            'FIDELITY', 'FIDELITY_BANK',
-            'APEX_NAFANA', 'APEX_NAFANA_BANK', 'NAFANA_RURAL_BANK', 'NAFANA_BANK',
-            'APEX_SUMA', 'APEX_SUMA_BANK', 'SUMA_RURAL_BANK', 'SUMA_BANK',
-            'ACCESS', 'ACCESS_BANK', 'CAL', 'CAL_BANK', 'CALBANK', 'ECOBANK', 'ECOBANK_BANK',
-            'GCB', 'GCB_BANK', 'GT', 'GT_BANK', 'GTBANK', 'GTBANK_BANK', 'STANBIC', 'STANBIC_BANK',
-            'FIRST_NATIONAL_BANK', 'FIRST_NATIONAL_BANK_FNB', 'FNB', 'FNB_BANK',
-            'FBN', 'FBN_BANK', 'FIRST_BANK_NIGERIA',
-            'FIRST_BANK_GHANA', 'FIRST_BANK_GHANA_FBG', 'FBG', 'FBG_BANK',
-        ];
-
-        $isBankChannelKey = function (string $key) use ($bankAccountKeys): bool {
-            $key = strtoupper(trim($key));
-            $key = preg_replace('/^ECASH[_-]*/', '', (string)$key);
-            $key = preg_replace('/[^A-Z0-9]+/', '_', (string)$key);
-            return in_array(trim((string)$key, '_'), $bankAccountKeys, true);
-        };
-
         $isMomoPayKey = function (string $key): bool {
             $key = strtoupper(trim($key));
             $key = preg_replace('/^ECASH[_-]*/', '', (string)$key);
             return in_array(preg_replace('/[^A-Z0-9]/', '', (string)$key), ['MTNMOMOPAY', 'MTNMOMOPAYOUT'], true);
         };
 
-        $isSharedAccountKey = function (string $key) use ($isBankChannelKey, $isMomoPayKey): bool {
-            return $isBankChannelKey($key) || $isMomoPayKey($key);
+        $isSharedAccountKey = static function (string $key): bool {
+            return users_manager_normalize_shared_account_key($key) !== null;
         };
 
         if ($isSharedAccountKey($fromKey) || $isSharedAccountKey($toKey)) {
@@ -264,6 +244,10 @@ try {
             $key = preg_replace('/^ECASH[_-]*/', '', $key);
             $key = preg_replace('/[^A-Z0-9]+/', '_', (string)$key);
             $key = trim((string)$key, '_');
+            $sharedKey = users_manager_normalize_shared_account_key($key);
+            if ($sharedKey !== null) {
+                return $sharedKey;
+            }
             if ($isMomoPayKey($key)) {
                 return 'MTN_MOMOPAY';
             }
@@ -468,13 +452,11 @@ try {
             $rows = $db->query(
                 "SELECT b.*
                  FROM drawer_balances AS b
-                 INNER JOIN cashdrawers AS cd ON cd.id = b.drawer_id
                  WHERE b.channel_type = 'ecash'
-                 AND DATE(cd.date_created) = :today
                  AND b.channel_key IN (" . implode(',', $candidatePlaceholders) . ")
-                 ORDER BY (LOWER(COALESCE(b.trans_status, '')) <> 'opening snapshot') DESC, b.id DESC
+                 ORDER BY (LOWER(TRIM(COALESCE(b.trans_status, ''))) <> 'opening snapshot') DESC, b.id DESC
                  LIMIT 1",
-                array_merge(['today' => date('Y-m-d')], $candidateParams)
+                $candidateParams
             ) ?: [];
 
             return !empty($rows) ? $rows[0] : null;
@@ -1471,152 +1453,94 @@ try {
 				$session = get_session();
 				$viewerUserId = (int)($session->id ?? 0);
 				$assignedSharedAccountKeys = users_manager_user_shared_account_keys($viewerUserId);
-				$bankChannelKeys = [
-					'ADB', 'ADB_BANK',
-					'ABSA', 'ABSA_BANK', 'ABSA_FORMERLY_BARCLAYS', 'ABSA_FORMERLY_BARCLAYS_BANK', 'BARCLAYS', 'BARCLAYS_BANK',
-					'FIDELITY', 'FIDELITY_BANK',
-					'APEX_NAFANA', 'APEX_NAFANA_BANK', 'APEX_SUMA', 'APEX_SUMA_BANK',
-					'ACCESS', 'ACCESS_BANK', 'CAL', 'CAL_BANK', 'ECOBANK',
-					'GCB', 'GCB_BANK', 'GT', 'GT_BANK', 'STANBIC', 'STANBIC_BANK',
-					'FIRST_NATIONAL_BANK', 'FIRST_NATIONAL_BANK_FNB', 'FNB', 'FNB_BANK',
-					'FIRST_BANK_GHANA', 'FIRST_BANK_GHANA_FBG', 'FBG', 'FBG_BANK',
-				];
-				$isBankKey = function (string $key) use ($bankChannelKeys): bool {
-					$key = strtoupper(trim($key));
-					if ($key === '') {
-						return false;
+				$viewerRoles = $session->roles ?? [];
+				if (!is_array($viewerRoles)) {
+					$viewerRoles = [$viewerRoles];
+				}
+				$canSeeSharedAccounts = users_manager_shared_account_roles_eligible($viewerRoles);
+                $db_channels = new \Core\Database;
+				$normalizeChannelKey = static function ($key): string {
+					$channelKeyRaw = strtoupper(trim((string)$key));
+					$channelKeyRaw = preg_replace('/^ECASH[_-]*/', '', (string)$channelKeyRaw);
+					$channelKeyRaw = str_replace(['_', ' '], '-', (string)$channelKeyRaw);
+					$channelKeyRaw = preg_replace('/-+/', '-', (string)$channelKeyRaw);
+					return trim((string)$channelKeyRaw, '-');
+				};
+				$isSharedChannelKey = static function (string $key): bool {
+					return users_manager_normalize_shared_account_key($key) !== null;
+				};
+				$finalizeBalance = static function ($bal, bool $isShared = false) {
+					$opening = (float)($bal->opening_balance ?? 0);
+					$credit = (float)($bal->credit ?? 0);
+					$debit = (float)($bal->debit ?? 0);
+					$bal->closing_balance = $opening + $credit - $debit;
+					if (empty($bal->trans_status)) {
+						$bal->trans_status = 'Sent';
 					}
-					$key = preg_replace('/^ECASH[_-]*/', '', $key);
-					$key = preg_replace('/[^A-Z0-9]+/', '_', (string)$key);
-					return in_array(trim((string)$key, '_'), $bankChannelKeys, true);
+					$sharedKey = users_manager_normalize_shared_account_key($bal->channel_key ?? '');
+					if ($sharedKey !== null) {
+						$bal->channel_key = $sharedKey;
+					}
+					$bal->is_shared_account = $isShared;
+					return $bal;
 				};
 
-                $db_channels = new \Core\Database;
-
-                if ($db_channels->table_exists(['drawer_balances'])) {
-
-                    $bal_query = "SELECT b.channel_type, b.channel_key, b.opening_balance, b.credit, b.debit, b.closing_balance, b.trans_status
-                                   FROM drawer_balances b
-                                   INNER JOIN (
-                                       SELECT channel_key, MAX(id) AS max_id
-                                       FROM drawer_balances
-                                       WHERE drawer_id = :drawer_id AND user_id = :user_id AND channel_type = 'ecash'
-                                       GROUP BY channel_key
-                                   ) last_row ON last_row.max_id = b.id";
-
-                    $bal_rows = $db->query($bal_query, [
-
-                        'drawer_id' => $row->id,
-
-                        'user_id'   => $row->user_id,
-
-                    ]);
-
-					$normalizeChannelKey = function ($key): string {
-						$channelKeyRaw = strtoupper(trim((string)$key));
-						$channelKeyRaw = preg_replace('/^ECASH[_-]*/', '', (string)$channelKeyRaw);
-						$channelKeyRaw = str_replace(['_', ' '], '-', (string)$channelKeyRaw);
-						$channelKeyRaw = preg_replace('/-+/', '-', (string)$channelKeyRaw);
-						return trim((string)$channelKeyRaw, '-');
-					};
-					$isMoMoPayKey = function (string $key): bool {
-						$key = strtoupper(trim($key));
-						$key = preg_replace('/^ECASH[_-]*/', '', $key);
-						$compact = preg_replace('/[^A-Z0-9]/', '', (string)$key);
-						return in_array($compact, ['MTNMOMOPAY', 'MTNMOMOPAYOUT'], true);
-					};
-					$isSharedChannelKey = function (string $key) use ($isBankKey, $isMoMoPayKey): bool {
-						return $isBankKey($key) || $isMoMoPayKey($key);
-					};
-					$finalizeBalance = function ($bal, bool $isShared = false) use ($isMoMoPayKey) {
-						$opening = (float)($bal->opening_balance ?? 0);
-						$credit  = (float)($bal->credit ?? 0);
-						$debit   = (float)($bal->debit ?? 0);
-						$bal->closing_balance = $opening + $credit - $debit;
-						if ($isMoMoPayKey((string)($bal->channel_key ?? ''))) {
-							$bal->channel_key = 'MTN_MOMOPAY';
-						}
-						if (empty($bal->trans_status)) {
-							$bal->trans_status = 'Sent';
-						}
-						$bal->is_shared_account = $isShared;
-						return $bal;
-					};
-
-				$localSharedChannels = [];
 				$localNonSharedChannels = [];
-                    if (!empty($bal_rows)) {
-                        foreach ($bal_rows as $bal) {
-							$channelKeyRaw = $normalizeChannelKey((string)($bal->channel_key ?? ''));
-							if (in_array($channelKeyRaw, ['EZWICH', 'E-ZWICH', 'CASH-DRAWER', 'CASH-CFA'], true)) {
-								continue;
-							}
-								$isShared = $isSharedChannelKey($channelKeyRaw);
-								if ($isShared) {
-									$localSharedChannels[] = $finalizeBalance($bal, true);
-								continue;
-							}
-								$localNonSharedChannels[] = $finalizeBalance($bal);
-                        }
-                    }
-				$ecash_channels = $localNonSharedChannels;
-
-					{
-							$sharedChannels = [];
-						try {
-							$sharedSql = "SELECT b.channel_type, b.channel_key, b.opening_balance, b.credit, b.debit, b.closing_balance, b.trans_status
-									FROM drawer_balances AS b
-									INNER JOIN (
-										SELECT db.channel_key,
-											COALESCE(
-												MAX(CASE WHEN LOWER(COALESCE(db.trans_status, '')) <> 'opening snapshot' THEN db.id END),
-												MAX(db.id)
-											) AS max_id
-										FROM drawer_balances AS db
-										INNER JOIN cashdrawers AS cd ON cd.id = db.drawer_id
-										WHERE db.channel_type = 'ecash'
-										  AND DATE(cd.date_created) = :today
-										GROUP BY db.channel_key
-									) last_row ON last_row.max_id = b.id";
-							$sharedRows = $db->query($sharedSql, ['today' => $today]) ?: [];
-							foreach ($sharedRows as $bal) {
-								$channelKeyRaw = $normalizeChannelKey((string)($bal->channel_key ?? ''));
-								if (in_array($channelKeyRaw, ['EZWICH', 'E-ZWICH', 'CASH-DRAWER', 'CASH-CFA'], true)) {
-									continue;
-								}
-								$finalized = $finalizeBalance($bal, true);
-								if ($isSharedChannelKey($channelKeyRaw)) {
-									$sharedChannels[] = $finalized;
-								}
-							}
-						} catch (\Throwable $e) {
-							$sharedChannels = [];
+				if ($db_channels->table_exists(['drawer_balances'])) {
+					$bal_query = "SELECT b.channel_type, b.channel_key, b.opening_balance, b.credit, b.debit, b.closing_balance, b.trans_status
+						FROM drawer_balances b
+						INNER JOIN (
+							SELECT channel_key, MAX(id) AS max_id
+							FROM drawer_balances
+							WHERE drawer_id = :drawer_id AND user_id = :user_id AND channel_type = 'ecash'
+							GROUP BY channel_key
+						) last_row ON last_row.max_id = b.id";
+					$bal_rows = $db_channels->query($bal_query, [
+						'drawer_id' => $row->id,
+						'user_id' => $row->user_id,
+					]) ?: [];
+					foreach ($bal_rows as $bal) {
+						$channelKey = (string)($bal->channel_key ?? '');
+						if (users_manager_normalize_shared_account_key($channelKey) !== null) {
+							continue;
 						}
-
-						if (!empty($sharedChannels)) {
-							$ecash_channels = array_merge($ecash_channels, $sharedChannels);
-						} elseif (!empty($localSharedChannels)) {
-							$ecash_channels = array_merge($ecash_channels, $localSharedChannels);
+						$normalizedKey = $normalizeChannelKey($channelKey);
+						if (in_array($normalizedKey, ['EZWICH', 'E-ZWICH', 'CASH-DRAWER', 'CASH-CFA'], true)) {
+							continue;
 						}
+						$localNonSharedChannels[] = $finalizeBalance($bal);
 					}
+				}
 
-                    $uniqueEcashChannels = [];
-                    foreach ($ecash_channels as $channel) {
-                        $channelKey = $normalizeChannelKey((string)($channel->channel_key ?? ''));
-                        if ($channelKey === ''
-                            || in_array($channelKey, ['CASH-DRAWER', 'CASH-CFA'], true)
-                            || isset($uniqueEcashChannels[$channelKey])) {
-                            continue;
-                        }
-                        $uniqueEcashChannels[$channelKey] = $channel;
-                    }
-                    $ecash_channels = array_values($uniqueEcashChannels);
+				$ecash_channels = $localNonSharedChannels;
+				if ($canSeeSharedAccounts) {
+					$sharedChannels = [];
+					foreach (users_manager_fetch_shared_account_balances() as $balance) {
+						$sharedChannels[] = $finalizeBalance((object)$balance, true);
+					}
+					$ecash_channels = array_merge($ecash_channels, $sharedChannels);
+				}
 
-                }
+				$uniqueEcashChannels = [];
+				foreach ($ecash_channels as $channel) {
+					$rawKey = (string)($channel->channel_key ?? '');
+					$channelKey = users_manager_normalize_shared_account_key($rawKey)
+						?? $normalizeChannelKey($rawKey);
+					if ($channelKey === ''
+						|| in_array($channelKey, ['CASH-DRAWER', 'CASH-CFA'], true)
+						|| isset($uniqueEcashChannels[$channelKey])) {
+						continue;
+					}
+					if (users_manager_normalize_shared_account_key($rawKey) !== null) {
+						$channel->channel_key = $channelKey;
+					}
+					$uniqueEcashChannels[$channelKey] = $channel;
+				}
+				$ecash_channels = array_values($uniqueEcashChannels);
 
             } catch (\Throwable $e) {
 
-                // fail silently; popup still shows core cash drawer
+                error_log('[basic-admin] Cashdrawer shared accounts could not be loaded: ' . $e->getMessage());
 
             }
 
@@ -1637,6 +1561,9 @@ try {
         // Denomination movement history for this drawer (for popup History modal)
 
         $deno_history = [];
+        $bank_transfer_history = function_exists('operations_account_collect_bank_transfer_history')
+            ? operations_account_collect_bank_transfer_history($drawerId, (int)($row->user_id ?? 0))
+            : [];
 
         try {
 
@@ -2293,7 +2220,12 @@ try {
                 || abs((float)($ch->closing_balance ?? 0)) > 0.009;
         };
         $cash_channels = array_values(array_filter($cash_channels, $hasNonZeroChannelBalance));
-        $ecash_channels = array_values(array_filter($ecash_channels, $hasNonZeroChannelBalance));
+        $ecash_channels = array_values(array_filter(
+            $ecash_channels,
+            static fn($channel): bool => !empty($channel->is_shared_account)
+                ? abs((float)($channel->closing_balance ?? 0)) > 0.000001
+                : $hasNonZeroChannelBalance($channel)
+        ));
 
         // Optional channel summaries if drawer_balances exists
 
@@ -2455,11 +2387,14 @@ try {
 
 
         // Inline denomination history section inside drawer slide-in (no nested modal)
-        if (!empty($deno_history)) {
+        if (!empty($deno_history) || !empty($bank_transfer_history)) {
             $html .= "<div style='margin-top: 24px; display:none;' id='drawerDenoHistoryWrapper'>";
-            $html .= "<h6 style='font-weight:600; margin-bottom:10px; display:flex; align-items:center; gap:6px;'><span>🧾</span><span>Denomination History</span></h6>";
-            $html .= "<div style='max-height:420px; overflow-y:auto; padding-right:4px;' id='drawerDenoHistory'>";
+            if (!empty($deno_history)) {
+                $html .= "<h6 style='font-weight:600; margin-bottom:10px; display:flex; align-items:center; gap:6px;'><span>🧾</span><span>Denomination History</span></h6>";
+                $html .= "<div style='max-height:420px; overflow-y:auto; padding-right:4px;' id='drawerDenoHistory'>";
+            }
 
+            if (!empty($deno_history)) {
             foreach ($deno_history as $tx) {
 
                 $txId = $tx['trans_id'] ?? null;
@@ -2645,8 +2580,28 @@ try {
                 $html .= "</tbody></table></div></div>";
 
             }
-
-            $html .= "</div></div>";
+                $html .= "</div>";
+            }
+            if (!empty($bank_transfer_history)) {
+                $html .= "<div style='margin-top:16px;'>";
+                $html .= "<h6 style='font-weight:600; margin-bottom:10px; display:flex; align-items:center; gap:6px;'><span>🏦</span><span>To &amp; From Bank Transactions</span></h6>";
+                $html .= "<div style='max-height:320px; overflow-y:auto; padding-right:4px;'>";
+                foreach ($bank_transfer_history as $transfer) {
+                    $directionLabel = strtolower((string)($transfer['direction'] ?? '')) === 'in' ? 'Received' : 'Sent';
+                    $transactionType = trim((string)($transfer['transaction_type'] ?? 'Bank Transfer'));
+                    $channelKey = trim((string)($transfer['channel_key'] ?? ''));
+                    $channelLabel = trim(str_replace('_', ' ', preg_replace('/^ECASH_/i', '', $channelKey)));
+                    $html .= "<div class='transaction-item mb-2' style='padding:10px; border:1px solid var(--bs-border-color); border-radius:8px;'>";
+                    $html .= "<div style='display:flex; justify-content:space-between; align-items:center; gap:10px;'>";
+                    $html .= "<span class='transaction-status status-pending'>" . esc((string)($transfer['trans_status'] ?? 'Approved')) . "</span>";
+                    $html .= "<span style='font-size:12px; color:var(--text-secondary);'>" . esc((string)($transfer['date_created'] ?? '')) . "</span></div>";
+                    $html .= "<div class='transaction-details' style='margin-top:6px;'><strong>TX #" . esc((string)($transfer['trans_id'] ?? '')) . "</strong><br>";
+                    $html .= esc($transactionType) . ' · ' . esc($directionLabel) . ' · ' . esc($channelLabel) . '<br>';
+                    $html .= "GHS " . number_format((float)($transfer['amount'] ?? 0), 2) . "</div></div>";
+                }
+                $html .= "</div></div>";
+            }
+            $html .= "</div>";
         }
 
 

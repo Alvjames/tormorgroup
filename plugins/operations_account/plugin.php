@@ -1,5 +1,7 @@
 <?php
 
+require_once dirname(__DIR__) . '/users-manager/helpers/shared-account-assignments.php';
+
 /**
  * Plugin name: MyWallet
  * Description: A way for admin to manage account
@@ -345,6 +347,9 @@ if(!function_exists('operations_account_previous_cashdrawer_snapshot')){
 		if ($userId <= 0) {
 			return null;
 		}
+		$canSeeSharedAccounts = users_manager_shared_account_roles_eligible(
+			users_manager_shared_account_role_names_for_user($userId)
+		);
 
 		$timezone = new \DateTimeZone('Africa/Accra');
 		$dayStart = (new \DateTimeImmutable('today', $timezone))->format('Y-m-d H:i:s');
@@ -451,6 +456,9 @@ if(!function_exists('operations_account_previous_cashdrawer_snapshot')){
 				if ($key === '') {
 					continue;
 				}
+				if (!$canSeeSharedAccounts && users_manager_normalize_shared_account_key($key) !== null) {
+					continue;
+				}
 				$label = preg_replace('/^ECASH_/', '', $key);
 				$label = ucwords(strtolower(str_replace('_', ' ', (string)$label)));
 				$opening = (float)($row->opening_balance ?? 0);
@@ -467,6 +475,44 @@ if(!function_exists('operations_account_previous_cashdrawer_snapshot')){
 					'balance' => $closing,
 					'proof_image' => (string)($row->proof_image ?? ''),
 				];
+			}
+
+			if ($canSeeSharedAccounts) {
+				$sharedRows = $db->query(
+					"SELECT db.channel_key, db.opening_balance, db.credit, db.debit,
+					        db.closing_balance, db.proof_image
+					 FROM drawer_balances db
+					 INNER JOIN (
+					     SELECT channel_key,
+					            COALESCE(
+					                MAX(CASE WHEN LOWER(TRIM(COALESCE(trans_status, ''))) <> 'opening snapshot' THEN id END),
+					                MAX(id)
+					            ) AS id
+					     FROM drawer_balances
+					     WHERE channel_type = 'ecash'
+					     GROUP BY channel_key
+					 ) latest ON latest.id = db.id
+					 WHERE db.channel_type = 'ecash'"
+				) ?: [];
+				if ($db->has_error) {
+					throw new \RuntimeException('Unable to load shared e-cash balances: ' . $db->error);
+				}
+				foreach ($sharedRows as $row) {
+					$key = strtoupper(trim((string)($row->channel_key ?? '')));
+					if ($key === '' || !operations_account_is_shared_channel_key($key)) {
+						continue;
+					}
+					$opening = (float)($row->opening_balance ?? 0);
+					$credit = (float)($row->credit ?? 0);
+					$debit = (float)($row->debit ?? 0);
+					$snapshot['ecash'][$key] = [
+						'name' => ucwords(strtolower(str_replace(['ECASH_', '_'], ['', ' '], $key))),
+						'balance' => $row->closing_balance !== null
+							? (float)$row->closing_balance
+							: $opening + $credit - $debit,
+						'proof_image' => (string)($row->proof_image ?? ''),
+					];
+				}
 			}
 		}
 
@@ -830,6 +876,7 @@ if(!function_exists('operations_account_is_bank_channel_key')){
 			'ACCESS', 'ACCESSBANK', 'CAL', 'CALBANK', 'ECOBANK',
 			'GCB', 'GCBBANK', 'GT', 'GTBANK', 'STANBIC', 'STANBICBANK',
 			'FIRSTNATIONALBANK', 'FIRSTNATIONALBANKFNB', 'FNB', 'FNBBANK',
+			'FBN', 'FBNBANK', 'FIRSTBANKNIGERIA',
 			'FIRSTBANKGHANA', 'FIRSTBANKGHANAFBG', 'FBG', 'FBGBANK',
 		];
 		return in_array($compact, $aliases, true);
@@ -1397,6 +1444,143 @@ if(!function_exists('operations_account_pick_record_value')){
 			}
 		}
 		return null;
+	}
+}
+
+if(!function_exists('operations_account_collect_bank_transfer_history')){
+	function operations_account_collect_bank_transfer_history(int $drawerId, int $userId, int $limit = 50): array
+	{
+		if($drawerId <= 0 || $userId <= 0){
+			return [];
+		}
+		$limit = max(1, min(100, $limit));
+
+		$db = new \Core\Database;
+		$history = [];
+		if($db->table_exists(['drawer_bank_transfer_history'])){
+			$rows = $db->query(
+				"SELECT trans_id, transaction_type, direction, channel_key, amount, trans_status, date_created
+				 FROM drawer_bank_transfer_history
+				 WHERE drawer_id = :drawer_id AND user_id = :user_id
+				 ORDER BY date_created DESC, id DESC
+				 LIMIT {$limit}",
+				['drawer_id' => $drawerId, 'user_id' => $userId]
+			);
+			if($db->has_error){
+				error_log('[CashdrawerHistory] Unable to load To/From bank movement history: ' . $db->error);
+			}else{
+				foreach($rows ?: [] as $row){
+					$history[] = [
+						'trans_id' => (int)($row->trans_id ?? 0),
+						'transaction_type' => (string)($row->transaction_type ?? ''),
+						'direction' => strtolower((string)($row->direction ?? '')),
+						'channel_key' => (string)($row->channel_key ?? ''),
+						'amount' => (float)($row->amount ?? 0),
+						'trans_status' => (string)($row->trans_status ?? ''),
+						'date_created' => (string)($row->date_created ?? ''),
+					];
+				}
+			}
+		}
+
+		if(!$db->table_exists(['bank_transfers_backoffice']) || !$db->table_exists(['cashdrawers'])){
+			return $history;
+		}
+		$drawerRows = $db->query(
+			'SELECT date_created FROM cashdrawers WHERE id = :drawer_id LIMIT 1',
+			['drawer_id' => $drawerId]
+		);
+		if($db->has_error){
+			error_log('[CashdrawerHistory] Unable to identify the drawer date for To/From bank history: ' . $db->error);
+			return $history;
+		}
+		$drawerDate = substr((string)($drawerRows[0]->date_created ?? ''), 0, 10);
+		if($drawerDate === ''){
+			return $history;
+		}
+
+		$knownMovements = [];
+		foreach($history as $movement){
+			$knownMovements[(int)$movement['trans_id'] . '|' . $movement['direction']] = true;
+		}
+		$legacyRows = $db->query(
+			"SELECT id AS trans_id, transaction_type, transfer_category, bank_name, network_name, amount,
+			        transaction_status AS trans_status,
+			        COALESCE(approved_at, date_updated, date_created) AS date_created,
+                CASE
+                    WHEN LOWER(TRIM(transaction_type)) IN ('to bank', 'from vault') AND third_party_user_id = :third_party_case_id THEN 'in'
+                    WHEN LOWER(TRIM(transaction_type)) IN ('to bank', 'from vault') AND created_by = :creator_case_id THEN 'out'
+                    WHEN LOWER(TRIM(transaction_type)) = 'from bank' AND withdrawing_user_id = :withdrawing_case_id THEN 'out'
+                    ELSE 'in'
+                END AS direction,
+                CASE
+                    WHEN (LOWER(TRIM(transaction_type)) IN ('to bank', 'from vault') AND created_by = :cash_creator_case_id)
+                      OR (LOWER(TRIM(transaction_type)) = 'from bank' AND second_party_user_id = :cash_recipient_case_id)
+                    THEN 'CASH_DRAWER'
+                    WHEN LOWER(TRIM(transfer_category)) = 'e-cash' THEN network_name
+                    ELSE bank_name
+                END AS channel_key
+			 FROM bank_transfers_backoffice
+			 WHERE LOWER(TRIM(COALESCE(transaction_status, ''))) = 'approved'
+			   AND (deleted IS NULL OR deleted = 0)
+			   AND DATE(COALESCE(approved_at, date_updated, date_created)) = :drawer_date
+			   AND (
+			        (LOWER(TRIM(transaction_type)) IN ('to bank', 'from vault')
+			         AND third_party_user_id = :third_party_id
+			         AND LOWER(TRIM(COALESCE(transfer_category, ''))) IN ('e-cash', 'bank float'))
+			        OR
+			        (LOWER(TRIM(transaction_type)) IN ('to bank', 'from vault')
+			         AND created_by = :creator_id
+			         AND LOWER(TRIM(COALESCE(transfer_category, ''))) IN ('e-cash', 'bank float'))
+			        OR
+			        (LOWER(TRIM(transaction_type)) = 'from bank'
+			         AND withdrawing_user_id = :withdrawing_user_id)
+			        OR
+			        (LOWER(TRIM(transaction_type)) = 'from bank'
+			         AND second_party_user_id = :cash_recipient_id)
+			   )
+			 ORDER BY COALESCE(approved_at, date_updated, date_created) DESC, id DESC
+			 LIMIT {$limit}",
+			[
+				'drawer_date' => $drawerDate,
+				'third_party_case_id' => $userId,
+				'creator_case_id' => $userId,
+				'withdrawing_case_id' => $userId,
+				'cash_creator_case_id' => $userId,
+				'cash_recipient_case_id' => $userId,
+				'third_party_id' => $userId,
+				'creator_id' => $userId,
+				'withdrawing_user_id' => $userId,
+				'cash_recipient_id' => $userId,
+			]
+		);
+		if($db->has_error){
+			error_log('[CashdrawerHistory] Unable to load legacy To/From bank movements: ' . $db->error);
+			return $history;
+		}
+		foreach($legacyRows ?: [] as $row){
+			$transId = (int)($row->trans_id ?? 0);
+			$direction = strtolower((string)($row->direction ?? ''));
+			$key = $transId . '|' . $direction;
+			if($transId <= 0 || isset($knownMovements[$key])){
+				continue;
+			}
+			$history[] = [
+				'trans_id' => $transId,
+				'transaction_type' => (string)($row->transaction_type ?? ''),
+				'direction' => $direction,
+				'channel_key' => (string)($row->channel_key ?? ''),
+				'amount' => (float)($row->amount ?? 0),
+				'trans_status' => (string)($row->trans_status ?? ''),
+				'date_created' => (string)($row->date_created ?? ''),
+			];
+			$knownMovements[$key] = true;
+		}
+
+		usort($history, static function(array $a, array $b): int {
+			return strcmp((string)($b['date_created'] ?? ''), (string)($a['date_created'] ?? ''));
+		});
+		return array_slice($history, 0, $limit);
 	}
 }
 
@@ -2272,11 +2456,13 @@ add_action('controller', function(){
 		$headerBalance = 0.0;
 		$deno_history = [];
 		$cashdrawer_edit_history = [];
+		$bank_transfer_history = [];
 
 		if (!empty($row)) {
 			$drawerId = (int)($row->id ?? 0);
 			$drawerDate = substr($row->date_created ?? date('Y-m-d'), 0, 10);
 			$cashdrawer_edit_history = operations_account_cashdrawer_edit_history($drawerId);
+			$bank_transfer_history = operations_account_collect_bank_transfer_history($drawerId, (int)($row->user_id ?? 0));
 
 			// Denomination snapshot (prefer drawer_id)
 			try {
@@ -4277,6 +4463,7 @@ add_action('basic-admin_main_content',function(){
 			$deno_history = [];
 			$opening_snapshot_history = [];
 			$cashdrawer_edit_history = operations_account_cashdrawer_edit_history((int)$drawerId);
+			$bank_transfer_history = operations_account_collect_bank_transfer_history((int)$drawerId, (int)($row->user_id ?? 0));
 			$denoHistoryPayload = operations_account_collect_deno_history((int)$drawerId, (int)$row->user_id, 0, 20);
 			$deno_history = $denoHistoryPayload['movements'] ?? [];
 			$opening_snapshot_history = $denoHistoryPayload['opening'] ?? [];
@@ -4509,19 +4696,12 @@ add_action('basic-admin_main_content',function(){
 				// Show local e-cash plus shared bank and MTN MoMoPay channels.
 				try{
 					$db_channels = new \Core\Database;
-					if($db_channels->table_exists(['drawer_balances'])){
-						$bal_query = "SELECT b.channel_type, b.channel_key, b.opening_balance, b.credit, b.debit, b.closing_balance, b.trans_status, b.trans_id, b.proof_image
-							FROM drawer_balances b
-							INNER JOIN (
-								SELECT channel_key, MAX(id) AS max_id
-								FROM drawer_balances
-								WHERE drawer_id = :drawer_id AND user_id = :user_id AND channel_type = 'ecash'
-								GROUP BY channel_key
-							) last_row ON last_row.max_id = b.id";
-						$bal_rows = $wallet->query($bal_query, [
-							'drawer_id' => $row->id,
-							'user_id' => $row->user_id,
-						]) ?: [];
+						$session = get_session();
+						$viewerRoles = $session->roles ?? [];
+						if (!is_array($viewerRoles)) {
+							$viewerRoles = [$viewerRoles];
+						}
+						$canSeeSharedAccounts = users_manager_shared_account_roles_eligible($viewerRoles);
 						$normalizeChannelKey = static function ($key): string {
 							$key = strtoupper(trim((string)$key));
 							$key = preg_replace('/^ECASH[_-]*/', '', $key);
@@ -4534,76 +4714,65 @@ add_action('basic-admin_main_content',function(){
 							$channel->debit = (float)($channel->debit ?? 0);
 							$channel->closing_balance = $channel->opening_balance + $channel->credit - $channel->debit;
 							$channel->trans_status = $channel->trans_status ?: 'Sent';
-							if (operations_account_is_momo_pay_channel_key((string)($channel->channel_key ?? ''))) {
-								$channel->channel_key = 'MTN_MOMOPAY';
+							$sharedKey = users_manager_normalize_shared_account_key($channel->channel_key ?? '');
+							if ($sharedKey !== null) {
+								$channel->channel_key = $sharedKey;
 							}
 							$channel->is_shared_account = $isShared;
 							return operations_account_enrich_drawer_entry($channel);
 						};
-						$canSeeSharedAccounts = user_can('is_admin');
 
-						$localSharedChannels = [];
 						$localNonSharedChannels = [];
-						foreach ($bal_rows as $bal) {
-							$key = $normalizeChannelKey($bal->channel_key ?? '');
-							if (in_array($key, ['EZWICH', 'E-ZWICH', 'CASH-DRAWER', 'CASH-CFA'], true)) {
-								continue;
-							}
-							$isSharedChannel = operations_account_is_shared_channel_key($key);
-							$bal = $finalizeChannel($bal, $isSharedChannel);
-							if ($isSharedChannel) {
-								if ($canSeeSharedAccounts) {
-									$localSharedChannels[] = $bal;
-								}
-								continue;
-							}
-							$localNonSharedChannels[] = $bal;
-						}
-						$ecash_channels = $localNonSharedChannels;
-
-						if ($canSeeSharedAccounts) {
-							$sharedChannels = [];
-							$sharedSql = "SELECT b.channel_type, b.channel_key, b.opening_balance, b.credit, b.debit, b.closing_balance, b.trans_status, b.trans_id, b.proof_image
+						if ($db_channels->table_exists(['drawer_balances'])) {
+							$bal_query = "SELECT b.channel_type, b.channel_key, b.opening_balance, b.credit, b.debit, b.closing_balance, b.trans_status, b.trans_id, b.proof_image
 								FROM drawer_balances b
 								INNER JOIN (
-									SELECT db.channel_key,
-										COALESCE(
-											MAX(CASE WHEN LOWER(COALESCE(db.trans_status, '')) <> 'opening snapshot' THEN db.id END),
-											MAX(db.id)
-										) AS max_id
-									FROM drawer_balances db
-									INNER JOIN cashdrawers cd ON cd.id = db.drawer_id
-									WHERE db.channel_type = 'ecash'
-										AND DATE(cd.date_created) = :shared_today
-									GROUP BY db.channel_key
+									SELECT channel_key, MAX(id) AS max_id
+									FROM drawer_balances
+									WHERE drawer_id = :drawer_id AND user_id = :user_id AND channel_type = 'ecash'
+									GROUP BY channel_key
 								) last_row ON last_row.max_id = b.id";
-							$sharedRows = $wallet->query($sharedSql, ['shared_today' => date('Y-m-d')]) ?: [];
+							$bal_rows = $wallet->query($bal_query, [
+								'drawer_id' => $row->id,
+								'user_id' => $row->user_id,
+							]) ?: [];
 							if (!empty($wallet->has_error)) {
-								throw new \RuntimeException('Unable to load shared cashdrawer accounts: ' . (string)$wallet->error);
+								throw new \RuntimeException('Unable to load cashdrawer e-cash channels: ' . (string)$wallet->error);
 							}
-							foreach ($sharedRows as $bal) {
-								$key = $normalizeChannelKey($bal->channel_key ?? '');
-								if (in_array($key, ['EZWICH', 'E-ZWICH', 'CASH-DRAWER', 'CASH-CFA'], true)
-									|| !operations_account_is_shared_channel_key($key)) {
+							foreach ($bal_rows as $bal) {
+								$channelKey = (string)($bal->channel_key ?? '');
+								if (users_manager_normalize_shared_account_key($channelKey) !== null) {
 									continue;
 								}
-								$sharedChannels[] = $finalizeChannel($bal, true);
+								$key = $normalizeChannelKey($channelKey);
+								if (in_array($key, ['EZWICH', 'E-ZWICH', 'CASH-DRAWER', 'CASH-CFA'], true)) {
+									continue;
+								}
+								$localNonSharedChannels[] = $finalizeChannel($bal);
 							}
-							$ecash_channels = array_merge(
-								$ecash_channels,
-								!empty($sharedChannels) ? $sharedChannels : $localSharedChannels
-							);
+						}
+						$ecash_channels = $localNonSharedChannels;
+						if ($canSeeSharedAccounts) {
+							$sharedChannels = [];
+							foreach (users_manager_fetch_shared_account_balances() as $balance) {
+								$sharedChannels[] = $finalizeChannel((object)$balance, true);
+							}
+							$ecash_channels = array_merge($ecash_channels, $sharedChannels);
 						}
 
 						$uniqueChannels = [];
 						foreach ($ecash_channels as $channel) {
-							$key = $normalizeChannelKey($channel->channel_key ?? '');
+							$rawKey = (string)($channel->channel_key ?? '');
+							$sharedKey = users_manager_normalize_shared_account_key($rawKey);
+							$key = $sharedKey ?? $normalizeChannelKey($rawKey);
 							if ($key !== '' && !isset($uniqueChannels[$key])) {
+								if ($sharedKey !== null) {
+									$channel->channel_key = $sharedKey;
+								}
 								$uniqueChannels[$key] = $channel;
 							}
 						}
 						$ecash_channels = array_values($uniqueChannels);
-					}
 				}catch(\Throwable $e){
 					error_log('[operations_account] Shared cashdrawer channels could not be loaded: ' . $e->getMessage());
 				}

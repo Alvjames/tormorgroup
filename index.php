@@ -460,30 +460,73 @@ add_action('before_controller', function () {
         }
 
         $blocking = [];
+        $cashPickupCanApprove = user_can('is_admin')
+            || user_can('is_general_manager')
+            || user_can('is_operations_manager');
+        if (!$cashPickupCanApprove && $db->table_exists(['user_roles_map', 'user_roles'])) {
+            require_once __DIR__ . '/plugins/cashpickup/helpers/permissions.php';
+            $cashPickupCanApprove = \CashpickupPermissions\can_assign_customer_payout($db, $userId);
+        }
+        $cashPickupApproverPredicate = $cashPickupCanApprove ? '1 = 1' : '1 = 0';
 
         $checks = [
-            ['label' => 'Backoffice Requests', 'table' => 'requests', 'sql' => "SELECT COUNT(id) AS c FROM requests WHERE (deleted IS NULL OR deleted = 0) AND LOWER(TRIM(COALESCE(transaction_status,''))) = 'pending' AND (created_by = :uid OR assigned = :uid)"],
-            ['label' => 'Backoffice Payments', 'table' => 'payments_backoffice', 'sql' => "SELECT COUNT(id) AS c FROM payments_backoffice WHERE (deleted IS NULL OR deleted = 0) AND LOWER(TRIM(COALESCE(transaction_status,''))) = 'pending' AND (created_by = :uid OR pay_to = :uid)"],
-            ['label' => 'Backoffice Commissions', 'table' => 'commissions', 'sql' => "SELECT COUNT(id) AS c FROM commissions WHERE (deleted IS NULL OR deleted = 0) AND bulk_parent_id IS NULL AND LOWER(TRIM(COALESCE(transaction_status,''))) = 'pending' AND (created_by = :uid OR pay_to = :uid)"],
+            ['label' => 'Backoffice Requests', 'table' => 'requests', 'sql' => "SELECT COUNT(id) AS c FROM requests WHERE (deleted IS NULL OR deleted = 0) AND LOWER(TRIM(COALESCE(transaction_status,''))) = 'pending' AND assigned = :uid"],
+            ['label' => 'Backoffice Payments', 'table' => 'payments_backoffice', 'sql' => "SELECT COUNT(id) AS c FROM payments_backoffice WHERE (deleted IS NULL OR deleted = 0) AND LOWER(TRIM(COALESCE(transaction_status,''))) = 'pending' AND pay_to = :uid"],
+            ['label' => 'Backoffice Commissions', 'table' => 'commissions', 'sql' => "SELECT COUNT(id) AS c FROM commissions WHERE (deleted IS NULL OR deleted = 0) AND bulk_parent_id IS NULL AND LOWER(TRIM(COALESCE(transaction_status,''))) = 'pending' AND pay_to = :uid"],
             ['label' => 'Cash Pickup', 'table' => 'cashpickups', 'sql' => "SELECT COUNT(id) AS c
-                FROM cashpickups
-                WHERE (deleted IS NULL OR deleted = 0)
-                AND LOWER(TRIM(COALESCE(approval_status,'pending'))) = 'pending'
+                FROM cashpickups cp
+                WHERE (cp.deleted IS NULL OR cp.deleted = 0)
+                AND LOWER(TRIM(COALESCE(cp.approval_status,'pending'))) = 'pending'
                 AND (
                     (
-                        LOWER(TRIM(COALESCE(credit_mode,''))) = 'credit'
-                        AND LOWER(TRIM(COALESCE(transaction_status,''))) = 'pending payout'
+                        LOWER(TRIM(COALESCE(cp.transaction_side,''))) = 'receive'
+                        AND LOWER(TRIM(COALESCE(cp.credit_mode,''))) = 'credit'
+                        AND LOWER(TRIM(COALESCE(cp.transaction_status,''))) = 'pending payout'
                         AND (
-                            assigned_user_id = :uid
-                            OR (COALESCE(assigned_user_id,0) = 0 AND created_by = :uid)
+                            SELECT COALESCE(SUM(COALESCE(p.amount_paid_out,0) + COALESCE(p.pickup_charge,0)),0)
+                            FROM cashpickups p
+                            WHERE (p.deleted IS NULL OR p.deleted = 0)
+                            AND LOWER(TRIM(COALESCE(p.transaction_side,''))) = 'pay'
+                            AND p.receive_id = cp.id
+                            AND LOWER(TRIM(COALESCE(p.transaction_status,''))) = 'approved'
+                            AND (p.confirmed_by IS NOT NULL AND p.confirmed_by != '')
+                            AND COALESCE(p.amount_paid_out,0) > 0
+                            AND (
+                                p.approval_status IS NULL
+                                OR p.approval_status = ''
+                                OR LOWER(TRIM(p.approval_status)) IN ('approved','pending')
+                            )
+                        ) < COALESCE(cp.amount_involved,0)
+                        AND (
+                            cp.assigned_user_id = :uid
+                            OR (COALESCE(cp.assigned_user_id,0) = 0 AND cp.created_by = :uid)
                         )
                     )
                     OR (
-                        NOT (
-                            LOWER(TRIM(COALESCE(credit_mode,''))) = 'credit'
-                            AND LOWER(TRIM(COALESCE(transaction_status,''))) = 'pending payout'
+                        {$cashPickupApproverPredicate}
+                        AND (
+                            NOT (
+                                LOWER(TRIM(COALESCE(cp.transaction_side,''))) = 'receive'
+                                AND LOWER(TRIM(COALESCE(cp.credit_mode,''))) = 'credit'
+                                AND LOWER(TRIM(COALESCE(cp.transaction_status,''))) = 'pending payout'
+                            )
+                            OR (
+                                SELECT COALESCE(SUM(COALESCE(p.amount_paid_out,0) + COALESCE(p.pickup_charge,0)),0)
+                                FROM cashpickups p
+                                WHERE (p.deleted IS NULL OR p.deleted = 0)
+                                AND LOWER(TRIM(COALESCE(p.transaction_side,''))) = 'pay'
+                                AND p.receive_id = cp.id
+                                AND LOWER(TRIM(COALESCE(p.transaction_status,''))) = 'approved'
+                                AND (p.confirmed_by IS NOT NULL AND p.confirmed_by != '')
+                                AND COALESCE(p.amount_paid_out,0) > 0
+                                AND (
+                                    p.approval_status IS NULL
+                                    OR p.approval_status = ''
+                                    OR LOWER(TRIM(p.approval_status)) IN ('approved','pending')
+                                )
+                            ) >= COALESCE(cp.amount_involved,0)
+                            AND COALESCE(cp.amount_involved,0) > 0
                         )
-                        AND (created_by = :uid OR assigned_user_id = :uid)
                     )
                 )"],
             ['label' => 'Reversals', 'table' => 'reversals', 'sql' => "SELECT COUNT(id) AS c FROM reversals WHERE LOWER(TRIM(COALESCE(transaction_status,''))) = 'pending' AND (created_by = :uid OR agent_involved = :uid)"],

@@ -52,6 +52,89 @@
 			gap: 10px;
 		}
 
+		#ecash-channels-list {
+			display: flex;
+			flex-direction: column;
+			gap: 14px;
+		}
+
+		.ecash-channel-group {
+			overflow: hidden;
+			border: 1px solid var(--bs-border-color);
+			border-radius: 14px;
+			background: var(--bs-body-bg);
+			box-shadow: 0 3px 12px rgba(15, 23, 42, 0.045);
+		}
+
+		.ecash-group-heading {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 12px;
+			padding: 14px 16px;
+			border-bottom: 1px solid var(--bs-border-color);
+			background: linear-gradient(110deg, var(--bs-tertiary-bg), var(--bs-body-bg));
+		}
+
+		.ecash-group-heading-main {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			min-width: 0;
+		}
+
+		.ecash-group-icon {
+			display: inline-flex;
+			width: 38px;
+			height: 38px;
+			flex: 0 0 38px;
+			align-items: center;
+			justify-content: center;
+			border-radius: 12px;
+			background: rgba(13, 110, 253, 0.1);
+			color: var(--bs-primary);
+		}
+
+		.ecash-group-heading h6 {
+			margin: 0;
+			font-weight: 750;
+			color: var(--bs-body-color);
+		}
+
+		.ecash-group-heading p {
+			margin: 3px 0 0;
+			font-size: 12px;
+			color: var(--bs-secondary-color);
+		}
+
+		.ecash-group-count {
+			flex: 0 0 auto;
+			padding: 5px 10px;
+			border: 1px solid var(--bs-border-color);
+			border-radius: 999px;
+			background: var(--bs-body-bg);
+			color: var(--bs-secondary-color);
+			font-size: 11px;
+			font-weight: 700;
+		}
+
+		.ecash-group-list {
+			padding: 12px 14px 4px;
+		}
+
+		.ecash-group-shared .ecash-group-heading {
+			background: linear-gradient(110deg, rgba(13, 202, 240, 0.13), var(--bs-body-bg));
+		}
+
+		.ecash-group-shared .ecash-group-icon {
+			background: rgba(13, 202, 240, 0.15);
+			color: #087990;
+		}
+
+		.ecash-group-shared .ecash-channel-item {
+			border-left: 3px solid rgba(13, 202, 240, 0.65);
+		}
+
 		.ecash-channel-item {
 			background: var(--bs-body-bg);
 			border: 2px solid var(--bs-border-color);
@@ -97,8 +180,107 @@
 				margin-bottom: 120px;
 			}
 		}
+		@media (max-width: 576px) {
+			.ecash-group-heading {
+				align-items: flex-start;
+				padding: 12px;
+			}
+
+			.ecash-group-heading p {
+				max-width: 220px;
+			}
+
+			.ecash-group-list {
+				padding: 10px 8px 2px;
+			}
+
+			.ecash-channel-item {
+				grid-template-columns: minmax(0, 1fr) 96px auto auto;
+				gap: 8px;
+				padding: 10px;
+			}
+		}
 		#staticBackdrop .modal-footer {
 			padding-bottom: calc(1rem + 90px);
+		}
+
+		.carry-forward-ecash-groups {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+			gap: 12px;
+			margin-top: 10px;
+		}
+
+		.carry-forward-ecash-group {
+			overflow: hidden;
+			border: 1px solid var(--bs-border-color);
+			border-radius: 12px;
+			background: var(--bs-body-bg);
+			box-shadow: 0 3px 12px rgba(15, 23, 42, 0.045);
+		}
+
+		.carry-forward-ecash-heading {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 10px;
+			padding: 12px 14px;
+			border-bottom: 1px solid var(--bs-border-color);
+			background: linear-gradient(110deg, var(--bs-tertiary-bg), var(--bs-body-bg));
+		}
+
+		.carry-forward-ecash-title {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			min-width: 0;
+			font-weight: 700;
+		}
+
+		.carry-forward-ecash-icon {
+			display: inline-flex;
+			width: 34px;
+			height: 34px;
+			flex: 0 0 34px;
+			align-items: center;
+			justify-content: center;
+			border-radius: 10px;
+			background: rgba(13, 110, 253, 0.1);
+			color: var(--bs-primary);
+		}
+
+		.carry-forward-ecash-meta {
+			color: var(--bs-secondary-color);
+			font-size: 11px;
+			font-weight: 600;
+			white-space: nowrap;
+		}
+
+		.carry-forward-ecash-group .table {
+			margin: 0;
+		}
+
+		.carry-forward-ecash-group .table > :not(caption) > * > * {
+			padding: 7px 12px;
+		}
+
+		.carry-forward-ecash-shared .carry-forward-ecash-heading {
+			background: linear-gradient(110deg, rgba(13, 202, 240, 0.13), var(--bs-body-bg));
+		}
+
+		.carry-forward-ecash-shared .carry-forward-ecash-icon {
+			background: rgba(13, 202, 240, 0.15);
+			color: #087990;
+		}
+
+		@media (max-width: 576px) {
+			.carry-forward-ecash-groups {
+				grid-template-columns: 1fr;
+			}
+
+			.carry-forward-ecash-heading {
+				padding: 10px;
+			}
 		}
 
 		.recon-proof-thumb {
@@ -133,6 +315,10 @@
 			background: var(--bs-secondary-bg);
 			border-color: var(--bs-primary);
 			box-shadow: 0 4px 12px var(--bs-shadow-color);
+		}
+
+		.ecash-group-shared .ecash-channel-item:hover {
+			border-left-color: var(--bs-info);
 		}
 
 		.ecash-network-icon {
@@ -349,6 +535,16 @@
 			<script>
 				window.__cashdrawerCreateErrors = <?= json_encode($globalDrawerErrors, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
 			</script>
+			<?php
+				$session = get_session();
+				$viewerRoles = $session->roles ?? [];
+				if (!is_array($viewerRoles)) {
+					$viewerRoles = [$viewerRoles];
+				}
+				$userRole = strtolower(trim((string)($viewerRoles[0] ?? '')));
+				$isOpsManager = ($userRole === 'operations manager');
+				$canSeeSharedAccounts = users_manager_shared_account_roles_eligible($viewerRoles);
+			?>
 			<?php if (!empty($cashdrawerCarryForwardError)): ?>
 				<div class="alert alert-danger mt-2">
 					<?= esc($cashdrawerCarryForwardError) ?>
@@ -384,30 +580,86 @@
 						<?php endif; ?>
 						<?php if (!empty($cashdrawerCarryForward['ecash'])): ?>
 							<div class="small fw-semibold">E-cash balances to carry forward</div>
-							<div class="table-responsive mt-2">
-								<table class="table table-sm table-bordered mb-0">
-									<thead><tr><th>Channel</th><th class="text-end">Balance (GHS)</th></tr></thead>
-									<tbody>
-										<?php foreach ($cashdrawerCarryForward['ecash'] as $previousChannel): ?>
-											<tr>
-												<td><?= esc($previousChannel['name']) ?></td>
-												<td class="text-end"><?= number_format((float)$previousChannel['balance'], 2) ?></td>
-											</tr>
-										<?php endforeach; ?>
-									</tbody>
-								</table>
+							<?php
+								$carryForwardEcashGroups = [
+									'mobile' => ['title' => 'Mobile Money & EVD', 'icon' => 'fa-mobile-screen-button', 'channels' => []],
+									'wallets' => ['title' => 'Digital Wallets', 'icon' => 'fa-wallet', 'channels' => []],
+									'shared' => ['title' => 'Shared Accounts', 'icon' => 'fa-building-columns', 'channels' => []],
+									'other' => ['title' => 'Other E-Cash Channels', 'icon' => 'fa-layer-group', 'channels' => []],
+								];
+								foreach ($cashdrawerCarryForward['ecash'] as $channelKey => $previousChannel) {
+									if (!$canSeeSharedAccounts
+										&& users_manager_normalize_shared_account_key((string)$channelKey) !== null) {
+										continue;
+									}
+									if ((float)($previousChannel['balance'] ?? 0) <= 0) {
+										continue;
+									}
+									$channelCode = strtoupper(preg_replace('/^ECASH_/', '', trim((string)$channelKey)));
+									$compactChannelCode = preg_replace('/[^A-Z0-9]/', '', $channelCode);
+									if (function_exists('operations_account_is_shared_channel_key')
+										&& operations_account_is_shared_channel_key((string)$channelKey)) {
+										$groupKey = 'shared';
+									} elseif (in_array($compactChannelCode, ['MTN', 'TELECEL', 'AT', 'MTNEVD', 'TELECELEVD', 'ATEVD'], true)) {
+										$groupKey = 'mobile';
+									} elseif (in_array($compactChannelCode, ['GMONEY', 'GHANAPAY', 'ZEEPAY'], true)) {
+										$groupKey = 'wallets';
+									} else {
+										$groupKey = 'other';
+									}
+									$carryForwardEcashGroups[$groupKey]['channels'][] = $previousChannel;
+								}
+								foreach ($carryForwardEcashGroups as &$group) {
+									usort($group['channels'], static function ($left, $right) {
+										$balanceOrder = (float)($right['balance'] ?? 0) <=> (float)($left['balance'] ?? 0);
+										return $balanceOrder !== 0
+											? $balanceOrder
+											: strcasecmp((string)($left['name'] ?? ''), (string)($right['name'] ?? ''));
+									});
+								}
+								unset($group);
+							?>
+							<div class="carry-forward-ecash-groups">
+								<?php foreach ($carryForwardEcashGroups as $groupKey => $group): ?>
+									<?php if (!empty($group['channels'])): ?>
+										<?php
+											$groupTotal = 0.0;
+											foreach ($group['channels'] as $channel) {
+												$groupTotal += (float)($channel['balance'] ?? 0);
+											}
+											$groupCount = count($group['channels']);
+										?>
+										<section class="carry-forward-ecash-group carry-forward-ecash-<?= esc($groupKey) ?>" aria-label="<?= esc($group['title']) ?>">
+											<div class="carry-forward-ecash-heading">
+												<div class="carry-forward-ecash-title">
+													<span class="carry-forward-ecash-icon" aria-hidden="true"><i class="fa-solid <?= esc($group['icon']) ?>"></i></span>
+													<span><?= esc($group['title']) ?></span>
+												</div>
+												<span class="carry-forward-ecash-meta"><?= number_format($groupCount) ?> <?= $groupCount === 1 ? 'channel' : 'channels' ?> · GHS <?= number_format($groupTotal, 2) ?></span>
+											</div>
+											<div class="table-responsive">
+												<table class="table table-sm table-hover">
+													<thead><tr><th>Channel</th><th class="text-end">Balance (GHS)</th></tr></thead>
+													<tbody>
+														<?php foreach ($group['channels'] as $previousChannel): ?>
+															<tr>
+																<td><?= esc($previousChannel['name']) ?></td>
+																<td class="text-end"><?= number_format((float)$previousChannel['balance'], 2) ?></td>
+															</tr>
+														<?php endforeach; ?>
+													</tbody>
+												</table>
+											</div>
+										</section>
+									<?php endif; ?>
+								<?php endforeach; ?>
 							</div>
 						<?php endif; ?>
 					</div>
 				</div>
 			<?php endif; ?>
 
-			<?php 
-				$session = get_session();
-				$userRole = strtolower($session->roles[0] ?? '');
-				$isOpsManager = ($userRole === 'operations manager');
-				$isAdmin = user_can('is_admin');
-
+			<?php
 				$sharedBankBalances = [];
 				$sharedBankProofs = [];
 				$postedEcashBalances = [];
@@ -416,14 +668,17 @@
 					if (strpos($postedField, 'ecash_') === 0
 						&& strpos($postedField, 'ecash_proof_') !== 0
 						&& is_scalar($postedValue)) {
+						if (!$canSeeSharedAccounts
+							&& users_manager_normalize_shared_account_key(substr($postedField, 6)) !== null) {
+							continue;
+						}
 						$postedEcashBalances[$postedField] = (string)$postedValue;
 					}
 				}
-				if ($isAdmin) {
+				if ($canSeeSharedAccounts) {
 					try {
 						$dbShared = new \Core\Database;
 						if ($dbShared->table_exists(['drawer_balances','cashdrawers'])) {
-							$today = date('Y-m-d');
 							$bankNetworkNames = [
 								'ADB Bank',
 								'Absa Bank',
@@ -434,17 +689,20 @@
 								'Ecobank',
 								'Fidelity Bank',
 								'First National Bank (FNB)',
+								'First Bank Nigeria (FBN)',
 								'First Bank Ghana (FBG)',
 								'GCB Bank',
 								'GT Bank',
 								'Stanbic Bank',
+								'MTN MoMoPay',
 							];
 							$bankKeyToName = [];
-							$params = ['today' => $today];
 							$placeholders = [];
 							$idx = 0;
 							foreach ($bankNetworkNames as $name) {
-								$key = 'ECASH_' . strtoupper(preg_replace('/[^A-Z0-9]+/i', '_', (string)$name));
+								$key = $name === 'First Bank Nigeria (FBN)'
+									? 'ECASH_FBN'
+									: 'ECASH_' . strtoupper(preg_replace('/[^A-Z0-9]+/i', '_', (string)$name));
 								$key = trim($key, '_');
 								$bankKeyToName[$key] = $name;
 								$ph = 'k' . $idx;
@@ -458,13 +716,11 @@
 								        INNER JOIN (
 								          SELECT db2.channel_key,
 								            COALESCE(
-								              MAX(CASE WHEN LOWER(COALESCE(db2.trans_status, '')) <> 'opening snapshot' THEN db2.id END),
+								              MAX(CASE WHEN LOWER(TRIM(COALESCE(db2.trans_status, ''))) <> 'opening snapshot' THEN db2.id END),
 								              MAX(db2.id)
 								            ) AS max_id
 								          FROM drawer_balances AS db2
-								          INNER JOIN cashdrawers AS cd ON cd.id = db2.drawer_id
 								          WHERE db2.channel_type = 'ecash'
-								            AND DATE(cd.date_created) = :today
 								            AND db2.channel_key IN (" . implode(',', $placeholders) . ")
 								          GROUP BY db2.channel_key
 								        ) latest ON latest.max_id = db.id";
@@ -561,7 +817,7 @@
 				<?php if (empty($cashdrawerCarryForward)): ?>
 					<h5>
 						<span class="me-2">E-Cash Channels</span>
-						<small class="text-muted">Configure MTN, Telecel, AT and other wallets</small>
+						<small class="text-muted">Mobile money, digital wallets<?= $canSeeSharedAccounts ? ', shared accounts' : '' ?> and more</small>
 					</h5>
 				<?php endif; ?>
 				<div id="ecash-channels-list"></div>
@@ -571,7 +827,6 @@
 			</div>
 
 			<div class="col-md-12 ">
-				<?php $session = get_session(); ?>
 				<?php if (!empty($cashdrawerCarryForward) && !empty($session->id)): ?>
 					<div class="small text-muted mb-2">Cashdrawer owner</div>
 					<div class="fw-semibold mb-3"><?= esc(($session->first_name ?? '') . ' ' . ($session->last_name ?? '')) ?></div>
@@ -886,34 +1141,77 @@
 		let channelCount = 0;
 
 		const networks = [
-			{ name: 'MTN', icon: '📱', color: '#FFD700' },
-			{ name: 'Telecel', icon: '📲', color: '#FF6B6B' },
-			{ name: 'AT', icon: '📞', color: '#4ECDC4' },
-			{ name: 'MTN EVD', icon: '📱', color: '#FFD700' },
-			{ name: 'Telecel EVD', icon: '📲', color: '#FF6B6B' },
-			{ name: 'AT EVD', icon: '📞', color: '#4ECDC4' },
-			{ name: 'G-MONEY', icon: '📡', color: '#95E1D3' },
-			{ name: 'GHANAPAY', icon: '💳', color: '#A8E6CF' },
-			{ name: 'ZEEPAY', icon: '💸', color: '#B39DDB' }
+			{ name: 'MTN', icon: '📱', color: '#FFD700', group: 'mobile' },
+			{ name: 'Telecel', icon: '📲', color: '#FF6B6B', group: 'mobile' },
+			{ name: 'AT', icon: '📞', color: '#4ECDC4', group: 'mobile' },
+			{ name: 'MTN EVD', icon: '📱', color: '#FFD700', group: 'mobile' },
+			{ name: 'Telecel EVD', icon: '📲', color: '#FF6B6B', group: 'mobile' },
+			{ name: 'AT EVD', icon: '📞', color: '#4ECDC4', group: 'mobile' },
+			{ name: 'G-MONEY', icon: '📡', color: '#95E1D3', group: 'wallets' },
+			{ name: 'GHANAPAY', icon: '💳', color: '#A8E6CF', group: 'wallets' },
+			{ name: 'ZEEPAY', icon: '💸', color: '#B39DDB', group: 'wallets' }
 		];
 
-		if (<?= isset($isAdmin) && $isAdmin ? 'true' : 'false' ?>) {
+		if (<?= isset($canSeeSharedAccounts) && $canSeeSharedAccounts ? 'true' : 'false' ?>) {
 			networks.push(
-				{ name: 'MTN MOMOPAY', icon: '📱', color: '#FFD700' },
-				{ name: 'Absa Bank', icon: '🏦', color: '#D1C4E9' },
-				{ name: 'Apex Nafana Bank', icon: '🏦', color: '#D1C4E9' },
-				{ name: 'Apex Suma Bank', icon: '🏦', color: '#D1C4E9' },
-				{ name: 'Access Bank', icon: '🏦', color: '#D1C4E9' },
-				{ name: 'Cal Bank', icon: '🏦', color: '#D1C4E9' },
-				{ name: 'Ecobank', icon: '🏦', color: '#D1C4E9' },
-				{ name: 'Fidelity Bank', icon: '🏦', color: '#D1C4E9' },
-				{ name: 'First National Bank (FNB)', icon: '🏦', color: '#D1C4E9' },
-				{ name: 'First Bank Ghana (FBG)', icon: '🏦', color: '#D1C4E9' },
-				{ name: 'GCB Bank', icon: '🏦', color: '#D1C4E9' },
-				{ name: 'GT Bank', icon: '🏦', color: '#D1C4E9' },
-				{ name: 'Stanbic Bank', icon: '🏦', color: '#D1C4E9' }
+				{ name: 'MTN MoMoPay', icon: '📱', color: '#FFD700', shared: true, group: 'shared' },
+				{ name: 'ADB Bank', icon: '🏦', color: '#D1C4E9', shared: true, group: 'shared' },
+				{ name: 'Absa Bank', icon: '🏦', color: '#D1C4E9', shared: true, group: 'shared' },
+				{ name: 'Apex Nafana Bank', icon: '🏦', color: '#D1C4E9', shared: true, group: 'shared' },
+				{ name: 'Apex Suma Bank', icon: '🏦', color: '#D1C4E9', shared: true, group: 'shared' },
+				{ name: 'Access Bank', icon: '🏦', color: '#D1C4E9', shared: true, group: 'shared' },
+				{ name: 'Cal Bank', icon: '🏦', color: '#D1C4E9', shared: true, group: 'shared' },
+				{ name: 'Ecobank', icon: '🏦', color: '#D1C4E9', shared: true, group: 'shared' },
+				{ name: 'Fidelity Bank', icon: '🏦', color: '#D1C4E9', shared: true, group: 'shared' },
+				{ name: 'First National Bank (FNB)', icon: '🏦', color: '#D1C4E9', shared: true, group: 'shared' },
+				{ name: 'First Bank Nigeria (FBN)', icon: '🏦', color: '#D1C4E9', shared: true, group: 'shared' },
+				{ name: 'First Bank Ghana (FBG)', icon: '🏦', color: '#D1C4E9', shared: true, group: 'shared' },
+				{ name: 'GCB Bank', icon: '🏦', color: '#D1C4E9', shared: true, group: 'shared' },
+				{ name: 'GT Bank', icon: '🏦', color: '#D1C4E9', shared: true, group: 'shared' },
+				{ name: 'Stanbic Bank', icon: '🏦', color: '#D1C4E9', shared: true, group: 'shared' }
 			);
 		}
+
+		const channelGroupDefinitions = [
+			{ key: 'mobile', title: 'Mobile Money & EVD', description: 'Core telco wallets and electronic voucher balances', icon: 'fa-mobile-screen-button' },
+			{ key: 'wallets', title: 'Digital Wallets', description: 'Independent payment and digital wallet channels', icon: 'fa-wallet' },
+			{ key: 'shared', title: 'Shared Accounts', description: 'Organization-wide balances · read-only', icon: 'fa-building-columns' },
+			{ key: 'other', title: 'Other E-Cash Channels', description: 'Additional channels carried forward or added below', icon: 'fa-layer-group' }
+		];
+		const channelGroups = {};
+		channelGroupDefinitions.forEach((group) => {
+			if (group.key === 'shared' && !networks.some((network) => network.shared)) return;
+			const section = document.createElement('section');
+			section.className = `ecash-channel-group ecash-group-${group.key}`;
+			section.setAttribute('aria-label', group.title);
+
+			const heading = document.createElement('div');
+			heading.className = 'ecash-group-heading';
+			heading.innerHTML = `
+				<div class="ecash-group-heading-main">
+					<span class="ecash-group-icon" aria-hidden="true"><i class="fa-solid ${group.icon}"></i></span>
+					<div><h6>${group.title}</h6><p>${group.description}</p></div>
+				</div>
+				<span class="ecash-group-count" aria-live="polite">0 channels</span>
+			`;
+			const list = document.createElement('div');
+			list.className = 'ecash-group-list';
+			section.append(heading, list);
+			ecashChannelsList.appendChild(section);
+			channelGroups[group.key] = {
+				list,
+				count: heading.querySelector('.ecash-group-count')
+			};
+		});
+
+		const appendChannelToGroup = (channel, groupKey = 'other') => {
+			const group = channelGroups[groupKey] || channelGroups.other;
+			if (!group) return;
+			channel.dataset.channelGroup = groupKey in channelGroups ? groupKey : 'other';
+			group.list.appendChild(channel);
+			const count = group.list.querySelectorAll('.ecash-channel-item').length;
+			group.count.textContent = `${count} ${count === 1 ? 'channel' : 'channels'}`;
+		};
 
 		const sharedBankBalances = <?= json_encode($sharedBankBalances ?? []) ?>;
 		const sharedBankProofs = <?= json_encode($sharedBankProofs ?? []) ?>;
@@ -939,6 +1237,7 @@
 			const div = document.createElement('div');
 			div.className = 'ecash-channel-item';
 			div.id = `ecash-channel-${index}`;
+			div.dataset.channelGroup = network ? (network.group || 'other') : 'other';
 			const fullNetworkName = network ? network.name : '';
 			const truncatedNetworkName = network ? truncateNetworkName(network.name) : '';
 			const sharedBalance = network ? getSharedBalance(fullNetworkName) : 0;
@@ -948,7 +1247,7 @@
 				div.dataset.sharedProof = sharedProof || '';
 			}
 			const sharedBadge = !isCarryForwardLocked && sharedBalance > 0
-				? `<span class="ecash-network-badge">Shared today: GHS ${sharedBalance.toFixed(2)}</span>`
+				? `<span class="ecash-network-badge">Shared balance: GHS ${sharedBalance.toFixed(2)}</span>`
 				: '';
 			const amountValue = !isCarryForwardLocked && sharedBalance > 0 ? sharedBalance.toFixed(2) : '0.00';
 			div.innerHTML = `
@@ -958,7 +1257,7 @@
 					<input type="hidden" class="ecash-network-name" value="${network ? fullNetworkName : ''}">
 					${sharedBadge}
 				</div>
-				<input type="number" step="0.01" class="form-control form-control-sm ecash-amount" placeholder="Opening balance" value="${amountValue}" ${isCarryForwardLocked ? 'readonly' : ''}>
+				<input type="number" step="0.01" class="form-control form-control-sm ecash-amount" placeholder="Opening balance" value="${amountValue}" ${isCarryForwardLocked || (network && network.shared) ? 'readonly' : ''}>
 				<input type="file" class="d-none proof-input" accept="image/*">
 				<button type="button" class="recon-proof-thumb ecash-proof-thumb" data-proof-index="${index}" aria-label="Upload proof image">
 					<img class="d-none" alt="Proof preview" />
@@ -977,14 +1276,15 @@
 		// Initialize with default networks
 		const initializeDefaultChannels = () => {
 			networks.forEach((network, index) => {
-				ecashChannelsList.appendChild(createChannelElement(index, network));
+				appendChannelToGroup(createChannelElement(index, network), network.group);
 				channelCount++;
 			});
 		};
 
 		const ecashChannelKey = (name) => {
-			const slug = String(name || '').trim().toUpperCase()
+			let slug = String(name || '').trim().toUpperCase()
 				.replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'CUSTOM';
+			if (slug === 'FIRST_BANK_NIGERIA_FBN') slug = 'FBN';
 			return 'ECASH_' + slug;
 		};
 
@@ -999,8 +1299,9 @@
 				});
 				if (!channel) {
 					const index = channelCount++;
-					channel = createChannelElement(index);
-					ecashChannelsList.appendChild(channel);
+					const knownNetwork = networks.find((network) => ecashChannelKey(network.name) === expectedKey);
+					channel = createChannelElement(index, knownNetwork || null);
+					appendChannelToGroup(channel, knownNetwork ? knownNetwork.group : 'other');
 					const nameInput = channel.querySelector('.ecash-network-name');
 					const label = channel.querySelector('.ecash-network-icon label');
 					const name = String(previous.name || 'Other');
@@ -1026,10 +1327,11 @@
 				});
 				if (!channel) {
 					const index = channelCount++;
-					channel = createChannelElement(index);
-					ecashChannelsList.appendChild(channel);
 					const name = suffix.toLowerCase().split('_')
 						.map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+					const knownNetwork = networks.find((network) => ecashChannelKey(network.name) === expectedKey);
+					channel = createChannelElement(index, knownNetwork || null);
+					appendChannelToGroup(channel, knownNetwork ? knownNetwork.group : 'other');
 					channel.querySelector('.ecash-network-name').value = name;
 					const label = channel.querySelector('.ecash-network-icon label');
 					label.textContent = truncateNetworkName(name);
@@ -1045,7 +1347,7 @@
 		btnAddEcash.addEventListener('click', (e) => {
 			e.preventDefault();
 			if (channelCount < 20) {
-				ecashChannelsList.appendChild(createChannelElement(channelCount));
+				appendChannelToGroup(createChannelElement(channelCount), 'other');
 				channelCount++;
 				validateCreateButton();
 			} else {
@@ -1058,7 +1360,15 @@
 			const element = document.getElementById(`ecash-channel-${index}`);
 			if (element) {
 				element.style.animation = 'fadeOut 0.3s ease-out';
-				setTimeout(() => element.remove(), 300);
+				setTimeout(() => {
+					const groupKey = element.dataset.channelGroup || 'other';
+					element.remove();
+					const group = channelGroups[groupKey];
+					if (group) {
+						const count = group.list.querySelectorAll('.ecash-channel-item').length;
+						group.count.textContent = `${count} ${count === 1 ? 'channel' : 'channels'}`;
+					}
+				}, 300);
 			}
 		};
 
@@ -1509,6 +1819,7 @@
 			const buildSlug = (name) => {
 				let slug = name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 				if (!slug) slug = 'CUSTOM';
+				if (slug === 'FIRST_BANK_NIGERIA_FBN') slug = 'FBN';
 				if (slugCounts[slug]) {
 					slugCounts[slug] += 1;
 					slug = `${slug}_${slugCounts[slug]}`;

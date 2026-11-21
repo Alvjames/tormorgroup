@@ -17,7 +17,7 @@ if (!function_exists('users_manager_shared_account_catalog')) {
 			'ECOBANK' => ['label' => 'Ecobank', 'aliases' => ['ECOBANK', 'ECOBANK BANK']],
 			'FIDELITY' => ['label' => 'Fidelity Bank', 'aliases' => ['FIDELITY', 'FIDELITY BANK']],
 			'FNB' => ['label' => 'First National Bank (FNB)', 'aliases' => ['FNB', 'FNB BANK', 'FIRST NATIONAL BANK', 'FIRST NATIONAL BANK FNB']],
-			'FBN' => ['label' => 'First Bank Nigeria (FBN)', 'aliases' => ['FBN', 'FBN BANK', 'FIRST BANK NIGERIA']],
+			'FBN' => ['label' => 'First Bank Nigeria (FBN)', 'aliases' => ['FBN', 'FBN BANK', 'FIRST BANK NIGERIA', 'FIRST BANK NIGERIA FBN']],
 			'FBG' => ['label' => 'First Bank Ghana (FBG)', 'aliases' => ['FBG', 'FBG BANK', 'FIRST BANK GHANA', 'FIRST BANK GHANA FBG']],
 			'GCB' => ['label' => 'GCB Bank', 'aliases' => ['GCB', 'GCB BANK']],
 			'GTBANK' => ['label' => 'GTBank', 'aliases' => ['GT', 'GT BANK', 'GTBANK', 'GTBANK BANK']],
@@ -259,6 +259,90 @@ if (!function_exists('users_manager_fetch_shared_account_assignment_owners')) {
 		}
 
 		return $owners;
+	}
+}
+
+if (!function_exists('users_manager_fetch_shared_account_balances')) {
+	function users_manager_fetch_shared_account_balances(): array
+	{
+		$balances = [];
+		foreach (array_keys(users_manager_shared_account_catalog()) as $accountKey) {
+			$balances[$accountKey] = [
+				'id' => 0,
+				'user_id' => 0,
+				'channel_type' => 'ecash',
+				'channel_key' => $accountKey,
+				'opening_balance' => 0.0,
+				'credit' => 0.0,
+				'debit' => 0.0,
+				'closing_balance' => 0.0,
+				'proof_image' => '',
+				'trans_status' => 'Opening Snapshot',
+				'trans_id' => null,
+			];
+		}
+
+		$db = new \Core\Database;
+		if (!$db->table_exists(['drawer_balances'])) {
+			return $balances;
+		}
+		$rows = $db->query(
+			"SELECT b.id, b.user_id, b.channel_type, b.channel_key, b.opening_balance, b.credit, b.debit,
+			        b.closing_balance, b.proof_image, b.trans_status, b.trans_id
+			 FROM drawer_balances b
+			 INNER JOIN (
+			     SELECT channel_key,
+			            COALESCE(
+			                MAX(CASE WHEN LOWER(TRIM(COALESCE(trans_status, ''))) <> 'opening snapshot' THEN id END),
+			                MAX(id)
+			            ) AS id
+			     FROM drawer_balances
+			     WHERE channel_type = 'ecash'
+			       AND COALESCE(channel_key, '') <> ''
+			     GROUP BY channel_key
+			 ) latest ON latest.id = b.id
+			 WHERE b.channel_type = 'ecash'
+			 ORDER BY b.id DESC"
+		) ?: [];
+		if (!empty($db->has_error)) {
+			throw new \RuntimeException('Unable to load shared-account balances: ' . (string)$db->error);
+		}
+
+		foreach ($rows as $row) {
+			$accountKey = users_manager_normalize_shared_account_key($row->channel_key ?? '');
+			if ($accountKey === null || !isset($balances[$accountKey])) {
+				continue;
+			}
+
+			$isOpeningSnapshot = strtolower(trim((string)($row->trans_status ?? ''))) === 'opening snapshot';
+			$currentIsOpeningSnapshot = strtolower(trim((string)$balances[$accountKey]['trans_status'])) === 'opening snapshot';
+			if (($isOpeningSnapshot && !$currentIsOpeningSnapshot)
+				|| ($isOpeningSnapshot === $currentIsOpeningSnapshot
+					&& (int)($row->id ?? 0) <= (int)$balances[$accountKey]['id'])) {
+				continue;
+			}
+
+			$opening = (float)($row->opening_balance ?? 0);
+			$credit = (float)($row->credit ?? 0);
+			$debit = (float)($row->debit ?? 0);
+			$balances[$accountKey] = [
+				'id' => (int)$row->id,
+				'user_id' => (int)($row->user_id ?? 0),
+				'channel_type' => (string)($row->channel_type ?? 'ecash'),
+				'channel_key' => $accountKey,
+				'opening_balance' => $opening,
+				'credit' => $credit,
+				'debit' => $debit,
+				'closing_balance' => $row->closing_balance !== null
+					? (float)$row->closing_balance
+					: $opening + $credit - $debit,
+				'proof_image' => (string)($row->proof_image ?? ''),
+				'trans_status' => (string)($row->trans_status ?? 'Opening Snapshot'),
+				'trans_id' => $row->trans_id ?? null,
+			];
+		}
+
+		return $balances;
 	}
 }
 

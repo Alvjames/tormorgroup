@@ -26,6 +26,7 @@ $thirdPartyStatusLower = strtolower(trim((string)($row->third_party_status ?? ''
 $isCreator = (int)($row->created_by ?? 0) === $userId;
 $canReassign = (backoffice_user_is_admin($session) || $isCreator)
 	&& $statusLower !== 'approved'
+	&& !backoffice_bank_transfer_is_rejected($row)
 	&& $thirdPartyStatusLower !== 'approved';
 
 if (!$csrf) {

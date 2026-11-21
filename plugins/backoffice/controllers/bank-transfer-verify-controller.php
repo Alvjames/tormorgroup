@@ -129,6 +129,7 @@ $updatePayload = [
 	'date_updated' => date('Y-m-d H:i:s'),
 ];
 $startedTransaction = false;
+$bankTransferCashDrawerContext = null;
 
 if ($isFromBankFlow) {
 	$amountValue = (float)($row->amount ?? 0);
@@ -139,6 +140,8 @@ if ($isFromBankFlow) {
 		$updatePayload['denos_json'] = json_encode($denosPayload, JSON_UNESCAPED_SLASHES);
 		$updatePayload['second_party_status'] = 'Rejected';
 		$updatePayload['third_party_reject_reason'] = $reason;
+		$updatePayload['rejected_by'] = $userId;
+		$updatePayload['rejected_at'] = $updatePayload['date_updated'];
 		$updatePayload['transaction_status'] = 'Rejected';
 		$bankTransfer->update($id, $updatePayload);
 
@@ -201,9 +204,11 @@ if ($isFromBankFlow) {
 		if (empty($movement['ok'])) {
 			$bankTransfer->rollBack();
 			$balance = $movement['balance'] ?? [];
-			$error = ($movement['reason'] ?? '') === 'insufficient_bank_balance'
-				? 'Insufficient ' . (string)($row->bank_name ?? 'bank') . ' balance in the withdrawing user cashdrawer. Required: GHS ' . number_format((float)($balance['required'] ?? $amountValue), 2) . ', available: GHS ' . number_format((float)($balance['available'] ?? 0), 2) . '.'
-				: 'Unable to update the selected bank balance and 2nd party cashdrawer. Confirm both users have active cashdrawers.';
+			$error = match ((string)($movement['reason'] ?? '')) {
+				'insufficient_bank_balance' => 'Insufficient ' . (string)($row->bank_name ?? 'bank') . ' balance in the withdrawing user cashdrawer. Required: GHS ' . number_format((float)($balance['required'] ?? $amountValue), 2) . ', available: GHS ' . number_format((float)($balance['available'] ?? 0), 2) . '.',
+				'history_record_failed' => 'Unable to record the bank transfer in cashdrawer history. Please try again or contact an administrator.',
+				default => 'Unable to update the selected bank balance and 2nd party cashdrawer. Confirm both users have active cashdrawers.',
+			};
 			set_value('old_post', $postdata);
 			set_value('errors', ['denos_json' => $error]);
 			redirect($admin_route . '/' . $plugin_route . '/view_bank_transfer/' . $id);
@@ -228,6 +233,8 @@ if ($isFromBankFlow) {
 		$reason = trim((string)($postdata['reject_reason'] ?? ''));
 		$updatePayload['second_party_status'] = 'Rejected';
 		$updatePayload['third_party_reject_reason'] = $reason;
+		$updatePayload['rejected_by'] = $userId;
+		$updatePayload['rejected_at'] = $updatePayload['date_updated'];
 		$updatePayload['transaction_status'] = 'Rejected';
 		$bankTransfer->update($id, $updatePayload);
 
@@ -326,8 +333,8 @@ if ($isFromBankFlow) {
 			exit;
 		}
 
-		$drawerContext = syncCashMovementCurrency($creatorId, $denosPayload, $amountValue, 'Verified To Bank', (int)$id, 'out', 'GHS');
-		if (empty($drawerContext)) {
+		$bankTransferCashDrawerContext = syncCashMovementCurrency($creatorId, $denosPayload, $amountValue, 'Verified To Bank', (int)$id, 'out', 'GHS');
+		if (empty($bankTransferCashDrawerContext)) {
 			$bankTransfer->rollBack();
 			set_value('old_post', $postdata);
 			set_value('errors', ['denos_json' => 'Unable to deduct the creator cashdrawer. Confirm today\'s drawer has the submitted currency notes mix.']);
@@ -351,6 +358,26 @@ if (!empty($bankTransfer->has_error)) {
 }
 if ($startedTransaction) {
 	$bankTransfer->commit();
+}
+
+if (!empty($bankTransferCashDrawerContext)) {
+	try {
+		\BackOfficeCashdrawer\recordBankTransferCashdrawerMovement(
+			$bankTransferCashDrawerContext,
+			(string)($row->transaction_type ?? 'To Bank'),
+			'CASH_DRAWER',
+			$amountValue,
+			'Verified To Bank',
+			(int)$id,
+			'out'
+		);
+	} catch (\Throwable $e) {
+		error_log('[backoffice bank transfer] cashdrawer history save failed for #' . (int)$id . ': ' . $e->getMessage());
+		set_value('errors', ['denos_json' => 'The cashdrawer was updated, but this To/From transaction could not be recorded in history. Please contact an administrator.']);
+		message_fail('The cashdrawer was updated, but this To/From transaction could not be recorded in history. Please contact an administrator.');
+		redirect($admin_route . '/' . $plugin_route . '/view_bank_transfer/' . $id);
+		exit;
+	}
 }
 
 set_value('old_post', []);

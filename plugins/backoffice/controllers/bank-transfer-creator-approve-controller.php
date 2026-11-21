@@ -60,12 +60,15 @@ if ($action === 'reject') {
 		exit;
 	}
 
+	$rejectedAt = date('Y-m-d H:i:s');
 	$bankTransfer->update($id, [
 		'second_party_status' => 'Rejected',
 		'third_party_reject_reason' => $reason,
+		'rejected_by' => $userId,
+		'rejected_at' => $rejectedAt,
 		'transaction_status' => 'Rejected',
 		'updated_by' => $userId,
-		'date_updated' => date('Y-m-d H:i:s'),
+		'date_updated' => $rejectedAt,
 	]);
 
 	message_success('Bank withdrawal transaction rejected by the 2nd party.');
@@ -113,9 +116,11 @@ if ($isFromBankCashFlow) {
 	if (empty($movement['ok'])) {
 		$bankTransfer->rollBack();
 		$balance = $movement['balance'] ?? [];
-		$message = ($movement['reason'] ?? '') === 'insufficient_bank_balance'
-			? 'Insufficient ' . (string)($row->bank_name ?? 'bank') . ' balance in the withdrawing user cashdrawer. Required: GHS ' . number_format((float)($balance['required'] ?? $amountValue), 2) . ', available: GHS ' . number_format((float)($balance['available'] ?? 0), 2) . '.'
-			: 'Unable to update the selected bank balance and 2nd party cashdrawer.';
+		$message = match ((string)($movement['reason'] ?? '')) {
+			'insufficient_bank_balance' => 'Insufficient ' . (string)($row->bank_name ?? 'bank') . ' balance in the withdrawing user cashdrawer. Required: GHS ' . number_format((float)($balance['required'] ?? $amountValue), 2) . ', available: GHS ' . number_format((float)($balance['available'] ?? 0), 2) . '.',
+			'history_record_failed' => 'Unable to record the bank transfer in cashdrawer history. Please try again or contact an administrator.',
+			default => 'Unable to update the selected bank balance and 2nd party cashdrawer.',
+		};
 		message_fail($message);
 		redirect($admin_route . '/' . $plugin_route . '/view_bank_transfer/' . $id);
 		exit;

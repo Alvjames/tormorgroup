@@ -103,17 +103,20 @@ if ($hasNewReceiptPhoto) {
 
 if ($reviewAction === 'reject') {
 	$reason = trim((string)($postdata['reject_reason'] ?? ''));
+	$rejectedAt = date('Y-m-d H:i:s');
 	$bankTransfer->update($id, [
 		'creator_receipt_status' => $receiptUpdatePayload['creator_receipt_status'],
 		'creator_bank_receipt_photo' => $receiptUpdatePayload['creator_bank_receipt_photo'] ?? ($row->creator_bank_receipt_photo ?? ''),
 		'creator_bank_receipt_uploaded_at' => $receiptUpdatePayload['creator_bank_receipt_uploaded_at'] ?? ($row->creator_bank_receipt_uploaded_at ?? null),
 		'third_party_status' => 'Rejected',
 		'third_party_reviewed_by' => $userId,
-		'third_party_reviewed_at' => date('Y-m-d H:i:s'),
+		'third_party_reviewed_at' => $rejectedAt,
 		'third_party_reject_reason' => $reason,
+		'rejected_by' => $userId,
+		'rejected_at' => $rejectedAt,
 		'transaction_status' => 'Rejected',
 		'updated_by' => $userId,
-		'date_updated' => date('Y-m-d H:i:s'),
+		'date_updated' => $rejectedAt,
 	]);
 	if ($bankTransfer->has_error) {
 		error_log('[backoffice bank transfer] third-party rejection save failed for #' . (int)$id . ': ' . $bankTransfer->error);
@@ -187,6 +190,7 @@ $isToBankFlow = backoffice_bank_transfer_is_to_bank_flow($transactionType);
 $transferCategory = strtolower(trim((string)($row->transfer_category ?? '')));
 $amountValue = (float)($row->amount ?? 0);
 $thirdPartyId = (int)($row->third_party_user_id ?? 0);
+$cashdrawerHistorySyncError = '';
 if ($isToBankFlow && $thirdPartyId > 0 && $amountValue > 0) {
 	try {
 		$channelKey = '';
@@ -201,14 +205,30 @@ if ($isToBankFlow && $thirdPartyId > 0 && $amountValue > 0) {
 		}
 
 		if ($channelKey !== '') {
-			\BackOfficeCashdrawer\syncEcashMovement($thirdPartyId, $channelKey, $amountValue, 'Approved', (int)$id, 'in');
+			if (empty(\BackOfficeCashdrawer\syncBankTransferEcashMovement(
+				$thirdPartyId,
+				(string)($row->transaction_type ?? 'To Bank'),
+				$channelKey,
+				$amountValue,
+				'Approved',
+				(int)$id,
+				'in'
+			))) {
+				$cashdrawerHistorySyncError = 'The assigned 3rd party cashdrawer could not be updated or recorded.';
+				error_log('[backoffice bank transfer] cashdrawer movement was not recorded for #' . $id);
+			}
 		}
 	} catch (\Throwable $e) {
-		error_log('[backoffice bank transfer] balance sync failed for #' . $id . ': ' . $e->getMessage());
+		$cashdrawerHistorySyncError = 'The assigned 3rd party cashdrawer movement could not be recorded.';
+		error_log('[backoffice bank transfer] cashdrawer history sync failed for #' . $id . ': ' . $e->getMessage());
 	}
 }
 
 set_value('errors', []);
-message_success('Bank transfer approved.');
+if ($cashdrawerHistorySyncError !== '') {
+	message_fail('Bank transfer approved, but ' . $cashdrawerHistorySyncError . ' Please contact an administrator.');
+} else {
+	message_success('Bank transfer approved.');
+}
 redirect($admin_route . '/' . $plugin_route . '/view_bank_transfer/' . $id);
 exit;

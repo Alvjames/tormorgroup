@@ -2,14 +2,19 @@
     // Set timezone to Accra
     date_default_timezone_set('Africa/Accra');
     require_once ROOTPATH . 'plugins/attendance/helpers/work-close-attendance.php';
+	header('Cache-Control: no-store, private');
 
     $user = new \BasicAuth\User;
     $log = new \BasicAuth\Log;
+	$postdata = $req->post();
 
-	if(csrf_verify($req->post()))
+	if(csrf_verify($postdata))
 	{
-		$postdata = $req->post();
-		$row = $user->first(['email'=>$postdata['email']]);
+		$emailInput = $postdata['email'] ?? '';
+		$passwordInput = $postdata['password'] ?? '';
+		$email = is_string($emailInput) ? trim($emailInput) : '';
+		$password = is_string($passwordInput) ? $passwordInput : '';
+		$row = ($email !== '' && $password !== '') ? $user->first(['email' => $email]) : false;
 		
 		if($row)
 		{
@@ -17,16 +22,14 @@
 			{
 
 				message_fail('Your account was deleted');
-				redirect('login');
-				exit;
+				return;
 			}else if((int)($row->disabled ?? 0) === 1)
 			{
 				message_fail('Your account is disabled. Please contact admin.');
-				redirect('login');
-				exit;
+				return;
 			}else{
 
-				if(password_verify($postdata['password'], $row->password))
+				if(password_verify($password, $row->password))
 				{
 					if ((int)($row->force_password_change ?? 0) === 1) {
 						$ses->auth($row);
@@ -108,8 +111,7 @@
 									$dailyGate['within_work_hours'] = false;
 									$message = 'Work has not started yet. Please login after ' . $workOpenForGate . '.';
 									message_fail($message);
-									redirect('login');
-									exit;
+									return;
 								}
 							}
 
@@ -128,8 +130,7 @@
 											'message' => 'Work has closed for today. You did not open a cashdrawer.',
 										]);
 										message_fail('Work has closed for today. You did not open a cashdrawer.');
-										redirect('login');
-										exit;
+										return;
 									}
 								}
 							}

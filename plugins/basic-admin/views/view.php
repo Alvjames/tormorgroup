@@ -1128,10 +1128,13 @@
         color: #684800;
         border: 1px solid rgba(164,117,0,.32);
         justify-content: center;
-        width: 1.9rem;
-        height: 1.9rem;
-        padding: 0;
-        font-size: 0.9rem;
+        width: auto;
+        min-height: 1.9rem;
+        height: auto;
+        padding: 4px 8px;
+        gap: 5px;
+        font-size: 0.68rem;
+        white-space: nowrap;
     }
 
     #drawerContent .cashdrawer-channel-label {
@@ -3368,7 +3371,7 @@
               <button type="button" class="btn btn-outline-danger btn-sm mx-1" title="PDF Export" onclick="exportCashdrawerPDF(getCurrentCashdrawerId())">
                 <i class="fa fa-file-pdf"></i>
               </button>
-              <button type="button" class="btn btn-outline-primary btn-sm mx-1" onclick="toggleDrawerDenoHistory()" title="Denomination History" aria-label="Denomination History">
+              <button type="button" class="btn btn-outline-primary btn-sm mx-1" onclick="toggleDrawerDenoHistory()" title="Cashdrawer Transaction History" aria-label="Cashdrawer Transaction History">
                 <i class="fa fa-history"></i>
               </button>
             <button type="button" class="btn btn-danger close-panel"><i class="fa fa-times"  style="color:white !important"></i></button>

@@ -1066,6 +1066,115 @@ function syncEcashMovement(int $actorUserId, string $channelKey, float $amount, 
     return $drawerContext;
 }
 
+function ensureBankTransferHistoryTable(): void
+{
+    static $ensured = false;
+    if ($ensured) {
+        return;
+    }
+
+    $db = new Database;
+    $db->query(
+        "CREATE TABLE IF NOT EXISTS drawer_bank_transfer_history (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            drawer_id INT UNSIGNED NOT NULL,
+            user_id INT UNSIGNED NOT NULL,
+            trans_id BIGINT UNSIGNED NOT NULL,
+            transaction_type VARCHAR(40) NOT NULL,
+            direction VARCHAR(8) NOT NULL,
+            channel_key VARCHAR(100) NOT NULL,
+            amount DECIMAL(18,2) NOT NULL,
+            trans_status VARCHAR(50) NOT NULL,
+            date_created DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY drawer_bank_transfer_history_unique (drawer_id, user_id, trans_id, direction),
+            KEY drawer_bank_transfer_history_date (drawer_id, user_id, date_created)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+    );
+    if ($db->has_error) {
+        throw new \RuntimeException('Unable to prepare bank-transfer cashdrawer history: ' . $db->error);
+    }
+    $ensured = true;
+}
+
+function recordBankTransferCashdrawerMovement(array $drawerContext, string $transactionType, string $channelKey, float $amount, string $status, int $transId, string $direction): void
+{
+    $drawerId = (int)($drawerContext['drawer_id'] ?? 0);
+    $drawerUserId = (int)($drawerContext['drawer_user_id'] ?? 0);
+    $direction = strtolower(trim($direction));
+    if ($drawerId <= 0 || $drawerUserId <= 0 || $transId <= 0 || $amount <= 0 || !in_array($direction, ['in', 'out'], true)) {
+        throw new \InvalidArgumentException('Invalid bank-transfer cashdrawer history movement.');
+    }
+
+    ensureBankTransferHistoryTable();
+    $db = new Database;
+    $db->query(
+        "INSERT INTO drawer_bank_transfer_history
+            (drawer_id, user_id, trans_id, transaction_type, direction, channel_key, amount, trans_status, date_created)
+         VALUES
+            (:drawer_id, :user_id, :trans_id, :transaction_type, :direction, :channel_key, :amount, :trans_status, :date_created)
+         ON DUPLICATE KEY UPDATE
+            transaction_type = VALUES(transaction_type),
+            channel_key = VALUES(channel_key),
+            amount = VALUES(amount),
+            trans_status = VALUES(trans_status),
+            date_created = VALUES(date_created)",
+        [
+            'drawer_id' => $drawerId,
+            'user_id' => $drawerUserId,
+            'trans_id' => $transId,
+            'transaction_type' => $transactionType,
+            'direction' => $direction,
+            'channel_key' => strtoupper(trim($channelKey)),
+            'amount' => round($amount, 2),
+            'trans_status' => $status,
+            'date_created' => date('Y-m-d H:i:s'),
+        ]
+    );
+    if ($db->has_error) {
+        throw new \RuntimeException('Unable to save bank-transfer cashdrawer history: ' . $db->error);
+    }
+}
+
+function verifyBankTransferEcashMovement(array $drawerContext, int $transId, string $status): void
+{
+    $drawerId = (int)($drawerContext['drawer_id'] ?? 0);
+    $drawerUserId = (int)($drawerContext['drawer_user_id'] ?? 0);
+    $db = new Database;
+    if ($drawerId <= 0 || $drawerUserId <= 0 || $transId <= 0 || !$db->table_exists(['drawer_balances'])) {
+        throw new \RuntimeException('The bank-side cashdrawer movement is unavailable.');
+    }
+
+    $rows = $db->query(
+        "SELECT id
+         FROM drawer_balances
+         WHERE drawer_id = :drawer_id AND user_id = :user_id
+           AND channel_type = 'ecash' AND trans_id = :trans_id AND trans_status = :trans_status
+         LIMIT 1",
+        [
+            'drawer_id' => $drawerId,
+            'user_id' => $drawerUserId,
+            'trans_id' => $transId,
+            'trans_status' => $status,
+        ]
+    );
+    if ($db->has_error || empty($rows)) {
+        throw new \RuntimeException('The bank-side cashdrawer movement was not saved.');
+    }
+}
+
+function syncBankTransferEcashMovement(int $actorUserId, string $transactionType, string $channelKey, float $amount, string $status, int $transId, string $direction = 'in'): ?array
+{
+    $drawerContext = syncEcashMovement($actorUserId, $channelKey, $amount, $status, $transId, $direction);
+    if (empty($drawerContext)) {
+        return null;
+    }
+
+    verifyBankTransferEcashMovement($drawerContext, $transId, $status);
+    recordBankTransferCashdrawerMovement($drawerContext, $transactionType, $channelKey, $amount, $status, $transId, $direction);
+    return $drawerContext;
+}
+
 function syncBankWithdrawalToCashdrawer(int $bankAccountUserId, int $cashRecipientUserId, string $bankName, array $denos, float $amount, string $status, int $transId): array
 {
     $balance = checkEcashChannelSufficiency($bankAccountUserId, $bankName, $amount);
@@ -1073,13 +1182,23 @@ function syncBankWithdrawalToCashdrawer(int $bankAccountUserId, int $cashRecipie
         return ['ok' => false, 'reason' => 'insufficient_bank_balance', 'balance' => $balance];
     }
 
-    if (empty(syncEcashMovement($bankAccountUserId, $bankName, $amount, $status, $transId, 'out'))) {
+    $bankDrawerContext = syncEcashMovement($bankAccountUserId, $bankName, $amount, $status, $transId, 'out');
+    if (empty($bankDrawerContext)) {
         return ['ok' => false, 'reason' => 'bank_balance_update_failed'];
     }
 
     $drawerContext = syncCashMovementCurrency($cashRecipientUserId, $denos, $amount, $status, $transId, 'in', 'GHS');
     if (empty($drawerContext)) {
         return ['ok' => false, 'reason' => 'cashdrawer_update_failed'];
+    }
+
+    try {
+        verifyBankTransferEcashMovement($bankDrawerContext, $transId, $status);
+        recordBankTransferCashdrawerMovement($bankDrawerContext, 'From Bank', $bankName, $amount, $status, $transId, 'out');
+        recordBankTransferCashdrawerMovement($drawerContext, 'From Bank', 'CASH_DRAWER', $amount, $status, $transId, 'in');
+    } catch (\Throwable $e) {
+        error_log('[backoffice bank transfer] cashdrawer movement history save failed for #' . $transId . ': ' . $e->getMessage());
+        return ['ok' => false, 'reason' => 'history_record_failed'];
     }
 
     return ['ok' => true, 'drawer_context' => $drawerContext];

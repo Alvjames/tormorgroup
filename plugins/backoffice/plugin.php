@@ -1746,13 +1746,15 @@ if(!function_exists('backoffice_ensure_bank_transfer_schema')){
 	{
 		static $ensured = false;
 		if ($ensured) return;
-		$marker = backoffice_runtime_marker_path('backoffice_bank_transfer_schema_20260427.done');
+		$marker = backoffice_runtime_marker_path('backoffice_bank_transfer_schema_20261121.done');
 		if(file_exists($marker)){
 			try {
 				$db = new \Core\Database;
 				$sourceColumn = $db->query("SHOW COLUMNS FROM bank_transfers_backoffice LIKE 'source_vault_id'");
 				$destinationColumn = $db->query("SHOW COLUMNS FROM bank_transfers_backoffice LIKE 'destination_vault_id'");
-				if (!empty($sourceColumn) && !empty($destinationColumn)) {
+				$rejectedByColumn = $db->query("SHOW COLUMNS FROM bank_transfers_backoffice LIKE 'rejected_by'");
+				$rejectedAtColumn = $db->query("SHOW COLUMNS FROM bank_transfers_backoffice LIKE 'rejected_at'");
+				if (!empty($sourceColumn) && !empty($destinationColumn) && !empty($rejectedByColumn) && !empty($rejectedAtColumn)) {
 					$ensured = true;
 					return;
 				}
@@ -1795,6 +1797,8 @@ if(!function_exists('backoffice_ensure_bank_transfer_schema')){
 					third_party_reviewed_by BIGINT UNSIGNED NULL,
 					third_party_reviewed_at DATETIME NULL,
 					third_party_reject_reason TEXT NULL,
+					rejected_by BIGINT UNSIGNED NULL,
+					rejected_at DATETIME NULL,
 					assignment_snapshot_json LONGTEXT NULL,
 					transaction_status VARCHAR(50) NULL DEFAULT 'Pending 2nd Party',
 					disabled TINYINT(1) NULL DEFAULT 0,
@@ -1839,6 +1843,8 @@ if(!function_exists('backoffice_ensure_bank_transfer_schema')){
 				'third_party_reviewed_by' => "ALTER TABLE bank_transfers_backoffice ADD COLUMN third_party_reviewed_by BIGINT UNSIGNED NULL",
 				'third_party_reviewed_at' => "ALTER TABLE bank_transfers_backoffice ADD COLUMN third_party_reviewed_at DATETIME NULL",
 				'third_party_reject_reason' => "ALTER TABLE bank_transfers_backoffice ADD COLUMN third_party_reject_reason TEXT NULL",
+				'rejected_by' => "ALTER TABLE bank_transfers_backoffice ADD COLUMN rejected_by BIGINT UNSIGNED NULL",
+				'rejected_at' => "ALTER TABLE bank_transfers_backoffice ADD COLUMN rejected_at DATETIME NULL",
 				'assignment_snapshot_json' => "ALTER TABLE bank_transfers_backoffice ADD COLUMN assignment_snapshot_json LONGTEXT NULL",
 				'transaction_status' => "ALTER TABLE bank_transfers_backoffice ADD COLUMN transaction_status VARCHAR(50) NULL DEFAULT 'Pending 2nd Party'",
 				'disabled' => "ALTER TABLE bank_transfers_backoffice ADD COLUMN disabled TINYINT(1) NULL DEFAULT 0",
@@ -2096,6 +2102,19 @@ if(!function_exists('backoffice_bank_transfer_is_to_bank_flow')){
 	function backoffice_bank_transfer_is_to_bank_flow(string $transactionType): bool
 	{
 		return in_array(strtolower(trim($transactionType)), ['to bank', 'from vault'], true);
+	}
+}
+
+if(!function_exists('backoffice_bank_transfer_is_rejected')){
+	function backoffice_bank_transfer_is_rejected(object $row): bool
+	{
+		foreach (['transaction_status', 'withdrawal_status', 'second_party_status', 'creator_receipt_status', 'third_party_status'] as $field) {
+			if (strtolower(trim((string)($row->{$field} ?? ''))) === 'rejected') {
+				return true;
+			}
+		}
+
+		return false;
 	}
 }
 
@@ -6497,6 +6516,9 @@ add_action('controller',function(){
 		if(URL(2) == 'bank_transfer_review'){
 			require plugin_path('controllers/bank-transfer-review-controller.php');
 		}else
+		if(URL(2) == 'bank_transfer_reject'){
+			require plugin_path('controllers/bank-transfer-reject-controller.php');
+		}else
 		if(URL(2) == 'reject_reconciliation'){
 			require plugin_path('controllers/reject_reconciliation-controller.php');
 		}else
@@ -7492,6 +7514,10 @@ add_action('basic-admin_main_content',function(){
 				        uv.last_name AS second_verified_last_name,
 				        ur.first_name AS third_reviewed_first_name,
 				        ur.last_name AS third_reviewed_last_name,
+				        urj.first_name AS rejected_by_first_name,
+				        urj.last_name AS rejected_by_last_name,
+				        uupd.first_name AS updated_by_first_name,
+				        uupd.last_name AS updated_by_last_name,
 				        vsrc.name AS source_vault_name,
 				        vdst.name AS destination_vault_name
 				 FROM bank_transfers_backoffice m
@@ -7501,6 +7527,8 @@ add_action('basic-admin_main_content',function(){
 				 LEFT JOIN users u3 ON m.third_party_user_id = u3.id
 				 LEFT JOIN users uv ON m.second_party_verified_by = uv.id
 				 LEFT JOIN users ur ON m.third_party_reviewed_by = ur.id
+				 LEFT JOIN users urj ON m.rejected_by = urj.id
+				 LEFT JOIN users uupd ON m.updated_by = uupd.id
 				 LEFT JOIN vaults vsrc ON m.source_vault_id = vsrc.id
 				 LEFT JOIN vaults vdst ON m.destination_vault_id = vdst.id
 				 WHERE m.id = :id

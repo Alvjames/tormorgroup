@@ -124,6 +124,17 @@ add_filter('basic-admin_before_admin_links',function($links){
 
 	$total_pending = 0;
 	$isManagerOrAdmin = (user_can('is_manager') || user_can('is_admin'));
+	$cashPickupCanApprove = user_can('is_admin')
+		|| user_can('is_general_manager')
+		|| user_can('is_operations_manager');
+	if (!$cashPickupCanApprove && $db->table_exists(['user_roles_map', 'user_roles'])) {
+		require_once __DIR__ . '/helpers/permissions.php';
+		try {
+			$cashPickupCanApprove = \CashpickupPermissions\can_assign_customer_payout($db, $user_id);
+		} catch (\Throwable $e) {
+			error_log('[cashpickup] Unable to verify approval access for navigation badge: ' . $e->getMessage());
+		}
+	}
 
 	try{
 		$params = [];
@@ -138,6 +149,20 @@ add_filter('basic-admin_before_admin_links',function($links){
 		$sourceWhere = $isManagerOrAdmin
 			? " AND LOWER(COALESCE(r.source,'')) IN ('cash','mtn','telecel','at','bank','credit')"
 			: '';
+		$ownPendingReviewWhere = '';
+		if (!$cashPickupCanApprove && $user_id > 0) {
+			$ownPendingReviewWhere = " AND NOT (
+				r.created_by = :uid_pending_creator
+				AND LOWER(TRIM(COALESCE(r.approval_status,''))) IN ('pending','draft')
+				AND LOWER(TRIM(COALESCE(r.transaction_status,''))) LIKE 'pending%'
+				AND NOT (
+					LOWER(TRIM(COALESCE(r.credit_mode,''))) = 'credit'
+					AND LOWER(TRIM(COALESCE(r.transaction_status,''))) = 'pending payout'
+				)
+			)";
+			$params['uid_pending_creator'] = $user_id;
+			$params['uid_pending_part_creator'] = $user_id;
+		}
 		if(!$isManagerOrAdmin && $user_id > 0){
 			$scopeParts = [
 				'r.created_by = :uid_created',
@@ -171,6 +196,7 @@ add_filter('basic-admin_before_admin_links',function($links){
 				AND transaction_status = 'Approved'
 				AND confirmed_by IS NOT NULL AND confirmed_by != ''
 				AND COALESCE(amount_paid_out,0) > 0
+				AND (created_by IS NULL OR created_by <> :uid_pending_part_creator)
 				GROUP BY receive_id
 			 ) pending ON pending.receive_id = r.id
 			 WHERE r.deleted = 0
@@ -182,6 +208,7 @@ add_filter('basic-admin_before_admin_links',function($links){
 				OR COALESCE(pending.pending_parts,0) > 0
 			 )
 			 {$sourceWhere}
+			 {$ownPendingReviewWhere}
 			 {$scopeWhere}",
 			$params
 		);

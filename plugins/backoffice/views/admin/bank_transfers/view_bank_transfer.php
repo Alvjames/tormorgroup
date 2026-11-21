@@ -19,9 +19,37 @@ $isThirdPartyStep = $isToBank
 	&& (int)($row->third_party_user_id ?? 0) === $currentUserId
 	&& backoffice_user_can_bank_transfer_third_party($session);
 $isLegacySecondPartyFinalStep = $isFromBank && $statusLower === 'pending creator approval' && (int)($row->second_party_user_id ?? 0) === $currentUserId;
+$bankTransferPartyIds = array_values(array_unique(array_filter(array_map('intval', [
+	$row->created_by ?? 0,
+	$row->withdrawing_user_id ?? 0,
+	$row->withdrawn_by ?? 0,
+	$row->second_party_user_id ?? 0,
+	$row->second_party_verified_by ?? 0,
+	$row->third_party_user_id ?? 0,
+	$row->third_party_reviewed_by ?? 0,
+]))));
+$canRejectBankTransfer = str_starts_with($statusLower, 'pending')
+	&& in_array($currentUserId, $bankTransferPartyIds, true);
+$rejectedByName = trim((string)(($row->rejected_by_first_name ?? '') . ' ' . ($row->rejected_by_last_name ?? '')));
+if ($rejectedByName === '') {
+	$rejectedByName = trim((string)(($row->updated_by_first_name ?? '') . ' ' . ($row->updated_by_last_name ?? '')));
+}
+if ($rejectedByName === '') {
+	$rejectedById = (int)($row->rejected_by ?? $row->updated_by ?? 0);
+	$rejectedByName = $rejectedById > 0 ? 'User #' . $rejectedById : 'Party not recorded';
+}
+$rejectedAt = trim((string)($row->rejected_at ?? ''));
+if ($rejectedAt === '') {
+	$rejectedAt = trim((string)($row->date_updated ?? ''));
+}
+$rejectedAtLabel = $rejectedAt !== '' ? get_date_time($rejectedAt) : '';
+if ($rejectedAtLabel === '') {
+	$rejectedAtLabel = 'Time not recorded';
+}
 $thirdPartyStatusLower = strtolower(trim((string)($row->third_party_status ?? '')));
 $canReassignBankTransfer = (backoffice_user_is_admin($session) || (int)($row->created_by ?? 0) === $currentUserId)
 	&& $statusLower !== 'approved'
+	&& !backoffice_bank_transfer_is_rejected($row)
 	&& $thirdPartyStatusLower !== 'approved';
 $oldPost = get_value('old_post');
 if (!is_array($oldPost)) {
@@ -43,8 +71,6 @@ $fromBankDenoJsonValue = (string)old_value('denos_json');
 if ($fromBankDenoJsonValue === '') {
 	$fromBankDenoJsonValue = (string)($row->denos_json ?? '[]');
 }
-$fromBankRejectReasonValue = (string)old_value('reject_reason');
-$thirdPartyRejectReasonValue = (string)old_value('reject_reason');
 $denoPayload = [];
 $denoTotals = [];
 if (!empty($row->denos_json)) {
@@ -198,6 +224,65 @@ $reassignWithdrawerValue = (string)($oldPost['withdrawing_user_id'] ?? ($row->wi
 		justify-content: space-between;
 		gap: .75rem;
 		margin-top: .75rem;
+	}
+	.bt-reject-modal .modal-content{
+		border: 0;
+		border-radius: 20px;
+		overflow: hidden;
+		box-shadow: 0 24px 80px rgba(15, 23, 42, .28);
+	}
+	.bt-reject-modal .modal-header{
+		border-bottom: 0;
+		padding: 1.5rem 1.5rem 1rem;
+		background: linear-gradient(135deg, rgba(220, 53, 69, .12), transparent 75%);
+	}
+	.bt-reject-modal-heading{
+		display: flex;
+		align-items: flex-start;
+		gap: .9rem;
+	}
+	.bt-reject-modal-icon{
+		display: grid;
+		width: 48px;
+		height: 48px;
+		flex: 0 0 48px;
+		place-items: center;
+		border-radius: 15px;
+		background: rgba(220, 53, 69, .12);
+		color: #dc3545;
+		font-size: 1.2rem;
+	}
+	.bt-reject-modal .modal-body{
+		padding: .5rem 1.5rem 1rem;
+	}
+	.bt-reject-summary{
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: .85rem 1rem;
+		margin-bottom: 1.25rem;
+		border: 1px solid var(--bs-border-color);
+		border-radius: 12px;
+		background: var(--bs-tertiary-bg);
+	}
+	.bt-reject-modal .modal-footer{
+		border-top: 0;
+		padding: 0 1.5rem 1.5rem;
+	}
+	.bt-rejection-audit{
+		display: flex;
+		align-items: flex-start;
+		gap: .85rem;
+		padding: 1rem;
+		border: 1px solid rgba(220, 53, 69, .2);
+		border-radius: 12px;
+		background: rgba(220, 53, 69, .06);
+	}
+	.bt-rejection-audit-icon{
+		color: #dc3545;
+		font-size: 1.15rem;
+		padding-top: .1rem;
 	}
 	.bt-form-errors{
 		border-left: 4px solid var(--bs-danger);
@@ -401,16 +486,106 @@ $reassignWithdrawerValue = (string)($oldPost['withdrawing_user_id'] ?? ($row->wi
 							</div>
 						</div>
 					<?php endif; ?>
-					<?php if(!empty($row->third_party_reject_reason)): ?>
+					<?php if($statusLower === 'rejected'): ?>
 						<div class="col-md-12">
-							<div class="alert alert-danger mb-0">
-								<strong>Reject reason:</strong> <?=nl2br(esc((string)$row->third_party_reject_reason))?>
+							<div class="bt-rejection-audit">
+								<div class="bt-rejection-audit-icon"><i class="fa-solid fa-circle-xmark"></i></div>
+								<div class="flex-grow-1">
+									<div class="fw-semibold text-danger">Transaction rejected</div>
+									<div class="small mt-1">
+										<span class="text-muted">By</span>
+										<strong><?=esc($rejectedByName)?></strong>
+										<span class="text-muted mx-1">&middot;</span>
+										<i class="fa-regular fa-clock me-1" aria-hidden="true"></i><?=esc($rejectedAtLabel)?>
+									</div>
+									<?php if(!empty($row->third_party_reject_reason)): ?>
+										<div class="mt-2">
+											<div class="small text-muted fw-semibold">Reason</div>
+											<div><?=nl2br(esc((string)$row->third_party_reject_reason))?></div>
+										</div>
+									<?php endif; ?>
+								</div>
 							</div>
 						</div>
 					<?php endif; ?>
 				</div>
 			</div>
 		</div>
+
+		<?php if($canRejectBankTransfer): ?>
+			<div class="card border-danger-subtle shadow-sm mt-3">
+				<div class="card-body">
+					<div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+						<div>
+							<h5 class="mb-1">Not satisfied with this transaction?</h5>
+							<p class="text-muted mb-0">Any party may reject while it is pending. Approval remains limited to the assigned party for each step.</p>
+						</div>
+						<button type="button" class="btn btn-outline-danger flex-shrink-0" id="bankTransferRejectTrigger" data-bs-toggle="modal" data-bs-target="#bankTransferRejectModal">
+							<i class="fa-solid fa-ban me-1" aria-hidden="true"></i> Reject transaction
+						</button>
+					</div>
+				</div>
+			</div>
+
+			<div class="modal fade bt-reject-modal" id="bankTransferRejectModal" tabindex="-1" aria-labelledby="bankTransferRejectModalLabel" aria-hidden="true">
+				<div class="modal-dialog modal-dialog-centered">
+					<div class="modal-content">
+						<div class="modal-header">
+							<div class="bt-reject-modal-heading">
+								<div class="bt-reject-modal-icon"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></div>
+								<div>
+									<h5 class="modal-title mb-1" id="bankTransferRejectModalLabel">Reject this transaction?</h5>
+									<p class="text-muted mb-0">This action cannot be undone.</p>
+								</div>
+							</div>
+							<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+						</div>
+						<form method="post" action="<?=ROOT?>/<?=$admin_route?>/<?=$plugin_route?>/bank_transfer_reject/<?=esc((string)$row->id)?>">
+							<?=csrf()?>
+							<div class="modal-body">
+								<div class="bt-reject-summary">
+									<span class="small text-muted">Transaction #<?=esc((string)$row->id)?></span>
+									<strong><?=number_format((float)($row->amount ?? 0), 2)?></strong>
+								</div>
+								<label class="form-label fw-semibold" for="bankTransferRejectReason">Reason for rejection</label>
+								<textarea class="form-control" id="bankTransferRejectReason" name="reject_reason" rows="4" maxlength="2000" required placeholder="Briefly explain what needs attention."></textarea>
+								<div class="d-flex justify-content-between gap-2 mt-2">
+									<small class="text-muted">The reason, your name and the time will be recorded.</small>
+									<?php if(!empty($errors['reject_reason'])): ?><small class="text-danger"><?=esc((string)$errors['reject_reason'])?></small><?php endif; ?>
+								</div>
+							</div>
+							<div class="modal-footer">
+								<button type="button" class="btn btn-light" data-bs-dismiss="modal">Keep transaction</button>
+								<button type="submit" class="btn btn-danger">
+									<i class="fa-solid fa-ban me-1" aria-hidden="true"></i> Confirm rejection
+								</button>
+							</div>
+						</form>
+					</div>
+				</div>
+			</div>
+			<script>
+				(function () {
+					var modalElement = document.getElementById('bankTransferRejectModal');
+					var reasonField = document.getElementById('bankTransferRejectReason');
+					if (modalElement && reasonField) {
+						modalElement.addEventListener('shown.bs.modal', function () {
+							reasonField.focus();
+						});
+					}
+				})();
+			</script>
+			<?php if(!empty($errors['reject_reason'])): ?>
+				<script>
+					document.addEventListener('DOMContentLoaded', function () {
+						var modalElement = document.getElementById('bankTransferRejectModal');
+						if (modalElement && window.bootstrap) {
+							window.bootstrap.Modal.getOrCreateInstance(modalElement).show();
+						}
+					});
+				</script>
+			<?php endif; ?>
+		<?php endif; ?>
 
 		<div class="card border-0 shadow-sm mt-3">
 			<div class="card-body">
@@ -464,11 +639,10 @@ $reassignWithdrawerValue = (string)($oldPost['withdrawing_user_id'] ?? ($row->wi
 					<?php if($isFromBank): ?>
 						<p class="text-muted mb-3">Upload the signed treasury slip, confirm the denominations received, and complete the transaction. <?= $isToVault ? 'Approval updates the selected vault immediately.' : 'Approval updates your cashdrawer immediately.' ?></p>
 					<?php else: ?>
-						<p class="text-muted mb-3">Upload the signed treasury slip, compare it against the denomination breakdown below, then either send it to the 3rd party or reject it with a clear reason.</p>
+						<p class="text-muted mb-3">Upload the signed treasury slip and compare it against the denomination breakdown below. Use the rejection modal if you are not satisfied.</p>
 					<?php endif; ?>
 					<form method="post" enctype="multipart/form-data" action="<?=ROOT?>/<?=$admin_route?>/<?=$plugin_route?>/bank_transfer_verify/<?=esc((string)$row->id)?>">
 						<?=csrf()?>
-						<input type="hidden" name="verification_action" id="fromBankVerificationAction" value="verify">
 						<?php if($isFromBank): ?>
 							<div class="mb-3">
 								<label class="form-label">Denominations to <?= $isToVault ? 'deposit into the vault' : 'add to your cashdrawer' ?></label>
@@ -481,12 +655,6 @@ $reassignWithdrawerValue = (string)($oldPost['withdrawing_user_id'] ?? ($row->wi
 								<?php if(!empty($errors['denos_json'])): ?><small class="text-danger d-block"><?=$errors['denos_json']?></small><?php endif; ?>
 							</div>
 							<div class="alert alert-warning d-none" id="fromBankMismatchAlert"></div>
-							<div class="mb-3 d-none" id="fromBankRejectReasonWrap">
-								<label class="form-label">Reject reason</label>
-								<textarea class="form-control" name="reject_reason" id="fromBankRejectReason" rows="3" placeholder="State clearly why the denominations do not match the amount withdrawn."><?=esc($fromBankRejectReasonValue)?></textarea>
-								<small class="text-muted d-block mt-1">Explain the shortage, overage, or any issue found during recheck.</small>
-								<?php if(!empty($errors['reject_reason'])): ?><small class="text-danger d-block"><?=$errors['reject_reason']?></small><?php endif; ?>
-							</div>
 						<?php endif; ?>
 						<div class="mb-3">
 							<label class="form-label">Signed treasury slip photo</label>
@@ -525,15 +693,7 @@ $reassignWithdrawerValue = (string)($oldPost['withdrawing_user_id'] ?? ($row->wi
 							<?php if(!empty($errors['treasury_slip_photo'])): ?><small class="text-danger"><?=$errors['treasury_slip_photo']?></small><?php endif; ?>
 						</div>
 						<?php if(!$isFromBank): ?>
-							<div class="mb-3">
-								<label class="form-label">Reject reason</label>
-								<textarea class="form-control" name="reject_reason" rows="3" placeholder="State clearly why the treasury slip does not tally the denomination breakdown."><?=esc($fromBankRejectReasonValue)?></textarea>
-								<?php if(!empty($errors['reject_reason'])): ?><small class="text-danger d-block"><?=$errors['reject_reason']?></small><?php endif; ?>
-							</div>
-							<div class="d-flex gap-2 flex-wrap">
-								<button type="submit" class="btn btn-success" onclick="document.getElementById('fromBankVerificationAction').value='verify'">Submit to 3rd Party</button>
-								<button type="submit" class="btn btn-danger" onclick="document.getElementById('fromBankVerificationAction').value='reject'">Reject Transaction</button>
-							</div>
+							<button type="submit" class="btn btn-success">Submit to 3rd Party</button>
 						<?php else: ?>
 							<button type="submit" class="btn btn-success" id="fromBankVerifyButton"><?=$isToVault ? 'Approve &amp; Deposit to Vault' : 'Approve &amp; Update Cashdrawer'?></button>
 						<?php endif; ?>
@@ -733,7 +893,7 @@ $reassignWithdrawerValue = (string)($oldPost['withdrawing_user_id'] ?? ($row->wi
 			<div class="card border-0 shadow-sm mt-3">
 				<div class="card-body">
 					<h5 class="mb-3">Final Receipt &amp; 3rd-Party Review</h5>
-					<p class="text-muted mb-3">Upload the final receipt, then approve or reject the transaction. This completes the <?=esc($transactionTypeLower === 'from vault' ? 'From Vault' : 'To Bank')?> flow.</p>
+					<p class="text-muted mb-3">Upload the final receipt, then approve the transaction. Any assigned party may reject it using the rejection modal.</p>
 					<form method="post" enctype="multipart/form-data" action="<?=ROOT?>/<?=$admin_route?>/<?=$plugin_route?>/bank_transfer_review/<?=esc((string)$row->id)?>" class="mt-3" data-native-upload="1">
 						<?=csrf()?>
 						<input type="hidden" name="review_action" id="thirdPartyReviewAction" value="approve">
@@ -756,7 +916,7 @@ $reassignWithdrawerValue = (string)($oldPost['withdrawing_user_id'] ?? ($row->wi
 										<span><?=$bankReceiptImageUrl === '' ? 'Choose Receipt' : 'Replace Receipt'?></span>
 									</label>
 									<div class="bt-upload-hint">
-										<?=$bankReceiptImageUrl === '' ? 'Upload the receipt before final approval or rejection (maximum 1MB).' : 'A receipt is already on file. Choose a new image only if you need to replace it (maximum 1MB).'?>
+										<?=$bankReceiptImageUrl === '' ? 'Upload the receipt before final approval (maximum 1MB).' : 'A receipt is already on file. Choose a new image only if you need to replace it (maximum 1MB).'?>
 									</div>
 								</div>
 								<div class="bt-upload-preview">
@@ -778,13 +938,9 @@ $reassignWithdrawerValue = (string)($oldPost['withdrawing_user_id'] ?? ($row->wi
 							<?php endif; ?>
 							<?php if(!empty($errors['creator_bank_receipt_photo'])): ?><small class="text-danger"><?=$errors['creator_bank_receipt_photo']?></small><?php endif; ?>
 						</div>
-						<label class="form-label">Reject reason</label>
-						<textarea class="form-control" name="reject_reason" rows="3" placeholder="State why this bank transfer is being rejected."><?=$thirdPartyRejectReasonValue !== '' ? esc($thirdPartyRejectReasonValue) : ''?></textarea>
-						<?php if(!empty($errors['reject_reason'])): ?><small class="text-danger"><?=$errors['reject_reason']?></small><?php endif; ?>
 						<?php if(!empty($errors['review_action'])): ?><div class="alert alert-danger py-2 mt-3 mb-0"><?=esc((string)$errors['review_action'])?></div><?php endif; ?>
 						<div class="d-flex gap-2 flex-wrap mt-3">
 							<button type="submit" class="btn btn-success" onclick="document.getElementById('thirdPartyReviewAction').value='approve'">Upload Receipt &amp; Approve</button>
-							<button type="submit" class="btn btn-danger" onclick="document.getElementById('thirdPartyReviewAction').value='reject'">Upload Receipt &amp; Reject</button>
 						</div>
 					</form>
 				</div>
@@ -795,7 +951,7 @@ $reassignWithdrawerValue = (string)($oldPost['withdrawing_user_id'] ?? ($row->wi
 			<div class="card border-0 shadow-sm mt-3">
 				<div class="card-body">
 					<h5 class="mb-3">2nd Party Final Approval</h5>
-					<p class="text-muted mb-3">This older transaction is still waiting on the final cashdrawer update step. Approve to complete it, or reject with a reason.</p>
+					<p class="text-muted mb-3">This older transaction is still waiting on the final cashdrawer update step. Approve to complete it, or use the rejection modal if you are not satisfied.</p>
 					<div class="d-flex gap-2 flex-wrap">
 						<form method="post" action="<?=ROOT?>/<?=$admin_route?>/<?=$plugin_route?>/bank_transfer_creator_approve/<?=esc((string)$row->id)?>">
 							<?=csrf()?>
@@ -803,15 +959,7 @@ $reassignWithdrawerValue = (string)($oldPost['withdrawing_user_id'] ?? ($row->wi
 							<button type="submit" class="btn btn-success">Approve &amp; Update Cashdrawer</button>
 						</form>
 					</div>
-						<form method="post" action="<?=ROOT?>/<?=$admin_route?>/<?=$plugin_route?>/bank_transfer_creator_approve/<?=esc((string)$row->id)?>" class="mt-3">
-							<?=csrf()?>
-							<input type="hidden" name="review_action" value="reject">
-							<label class="form-label">Reject reason</label>
-							<textarea class="form-control" name="reject_reason" rows="3" placeholder="State why this From Bank transaction is being rejected."><?=esc($fromBankRejectReasonValue)?></textarea>
-							<?php if(!empty($errors['reject_reason'])): ?><small class="text-danger"><?=$errors['reject_reason']?></small><?php endif; ?>
-							<button type="submit" class="btn btn-danger mt-2">Reject</button>
-						</form>
-					</div>
+				</div>
 			</div>
 		<?php endif; ?>
 	</div>
@@ -1071,9 +1219,6 @@ $reassignWithdrawerValue = (string)($oldPost['withdrawing_user_id'] ?? ($row->wi
 		if (!modalEl) return;
 		const denosInput = document.getElementById('fromBankDenoJson');
 		const amountField = document.getElementById('fromBankDenoAmount');
-		const actionInput = document.getElementById('fromBankVerificationAction');
-		const rejectWrap = document.getElementById('fromBankRejectReasonWrap');
-		const rejectReason = document.getElementById('fromBankRejectReason');
 		const mismatchAlert = document.getElementById('fromBankMismatchAlert');
 		const verifyButton = document.getElementById('fromBankVerifyButton');
 		const countField = document.getElementById('fromBankDenoCount');
@@ -1108,22 +1253,17 @@ $reassignWithdrawerValue = (string)($oldPost['withdrawing_user_id'] ?? ($row->wi
 		function syncVerificationState(totalAmount, totalCount){
 			const hasEntries = Number(totalCount || 0) > 0;
 			const mismatch = hasEntries && Math.abs(Number(totalAmount || 0) - expectedTotal) > 0.009;
-			if (actionInput) actionInput.value = mismatch ? 'reject' : 'verify';
-			if (rejectWrap) rejectWrap.classList.toggle('d-none', !mismatch);
-			if (rejectReason) rejectReason.required = mismatch;
 			if (mismatchAlert) {
 				if (mismatch) {
 					mismatchAlert.classList.remove('d-none');
-					mismatchAlert.innerHTML = 'Denomination mismatch detected. Expected <strong>' + expectedTotal.toFixed(2) + '</strong> but entered <strong>' + Number(totalAmount || 0).toFixed(2) + '</strong>. Enter a clear reason and submit the rejection.';
+					mismatchAlert.innerHTML = 'Denomination mismatch detected. Expected <strong>' + expectedTotal.toFixed(2) + '</strong> but entered <strong>' + Number(totalAmount || 0).toFixed(2) + '</strong>. Approval is disabled. To reject, open the <button type="button" class="btn btn-link btn-sm p-0 align-baseline" data-bs-toggle="modal" data-bs-target="#bankTransferRejectModal">rejection modal</button>.';
 				} else {
 					mismatchAlert.classList.add('d-none');
 					mismatchAlert.innerHTML = '';
 				}
 			}
 			if (verifyButton) {
-				verifyButton.textContent = mismatch ? 'Reject & Submit' : 'Approve & Update Cashdrawer';
-				verifyButton.classList.toggle('btn-success', !mismatch);
-				verifyButton.classList.toggle('btn-danger', mismatch);
+				verifyButton.disabled = mismatch;
 			}
 		}
 

@@ -112,20 +112,33 @@ div.continueText{
 	        required
 	        class="input-field"
 	        placeholder="you@example.com"
-	        autocomplete="username"/>
+	        autocomplete="username"
+	        value="<?=esc(is_string($_POST['email'] ?? null) ? $_POST['email'] : '')?>"/>
 	    </div>
 
 	    <div class="input-group">
 	      <label for="password" class="input-label text-light">Password</label>
-	      <input
-	        type="password"
-	        id="password"
-	        name="password"
-	        required
-	        class="input-field"
-	        placeholder="••••••••"
-	        autocomplete="current-password"
-	      />
+	      <div class="password-field-wrap">
+	        <input
+	          type="password"
+	          id="password"
+	          name="password"
+	          required
+	          class="input-field"
+	          placeholder="••••••••"
+	          autocomplete="current-password"
+	          value="<?=esc(is_string($_POST['password'] ?? null) ? $_POST['password'] : '')?>"
+	        />
+	        <button
+	          type="button"
+	          class="password-toggle"
+	          aria-label="Show password"
+	          aria-pressed="false"
+	          aria-controls="password"
+	        >
+	          <i class="fa-solid fa-eye" aria-hidden="true"></i>
+	        </button>
+	      </div>
 	    </div>
 
 	    <button type="submit" class="btn-login">
@@ -140,7 +153,7 @@ div.continueText{
 	    </div>
 	</div>
 
-<script src="<?=plugin_http_path('assets/js/plugin.js')?>"></script>
+<script src="<?=plugin_http_path('assets/js/plugin.js')?>?v=<?= (int)filemtime(__DIR__ . '/../assets/js/plugin.js') ?>"></script>
 	<script>
 		(function(){
 			var btn = document.getElementById('workClosedToastDismiss');
