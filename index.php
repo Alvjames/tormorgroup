@@ -13,6 +13,7 @@ define('ROOTPATH', __DIR__.DS);
 
 require 'config.php';
 require 'app'.DS.'core'.DS.'init.php';
+require_once ROOTPATH . 'plugins/basic-admin/helpers/session-lock.php';
 
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');

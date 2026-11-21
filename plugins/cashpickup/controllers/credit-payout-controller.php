@@ -246,5 +246,24 @@ try {
 	return;
 }
 
+$creditNotificationRecord = [
+	'id' => $creditReceiveId,
+	'created_by' => $userId,
+	'assigned_user_id' => $assignToUserId,
+	'sender_details' => (string)($customer->full_name ?? ''),
+	'amount_involved' => $grossAmount,
+	'tracking_id' => (string)($customer->tracking_id ?? ''),
+	'approval_status' => 'approved',
+	'transaction_status' => 'Pending payout',
+];
+\cashpickup_whatsapp_notify(
+	$creditNotificationRecord,
+	\cashpickup_whatsapp_participant_ids($creditNotificationRecord, [$userId, $assignToUserId]),
+	'credit payout creator and assigned agent',
+	'CREDIT PAYOUT ASSIGNED',
+	'Contact the customer and complete the assigned credit payout.',
+	$admin_route.'/'.$plugin_route.'/view/'.$creditReceiveId
+);
+
 message_success('Credit payout assigned successfully!');
 redirect($admin_route.'/'.$plugin_route.'/customer/'.$customerId);

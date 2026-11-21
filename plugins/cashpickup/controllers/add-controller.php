@@ -1394,6 +1394,32 @@ if ($csrf && $cashpickup->validate_insert($postdata))
 			}
 		}
 
+		$notificationRecipients = \cashpickup_whatsapp_participant_ids(
+			$postdata,
+			array_merge(
+				[(int)$user_id],
+				\cashpickup_whatsapp_approver_ids()
+			)
+		);
+		$notificationRecipientLabel = $side === 'receive'
+			? 'cashpickup creator and Cash Pickup reviewers'
+			: 'payout creator, cashpickup creator, and Cash Pickup reviewers';
+		$notificationNextAction = $side === 'receive'
+			? ((strtolower((string)($postdata['approval_status'] ?? 'pending')) === 'pending')
+				? 'Review and approve the received cash pickup, then assign an agent.'
+				: 'Assign an eligible agent to complete the payout.')
+			: ((strtolower((string)($postdata['approval_status'] ?? 'pending')) === 'pending')
+				? 'Review and approve the submitted payout.'
+				: 'Review the completed payout record.');
+		\cashpickup_whatsapp_notify(
+			$postdata,
+			$notificationRecipients,
+			$notificationRecipientLabel,
+			$side === 'receive' ? 'RECEIVED' : 'PAYOUT SUBMITTED',
+			$notificationNextAction,
+			$admin_route.'/'.$plugin_route.'/view/'.(int)($postdata['id'] ?? 0)
+		);
+
 		message_success("Cash pickup recorded successfully!");
 		redirect($admin_route.'/'.$plugin_route);
 	}

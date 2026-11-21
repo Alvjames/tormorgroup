@@ -196,5 +196,22 @@ if ($side === 'pay' && $prevApproval === 'approved') {
 	}
 }
 
+$denialNotificationRecord = array_merge((array)$deniedRow, [
+	'approval_status' => 'denied',
+	'denial_reason' => $reason,
+]);
+$denialRecipients = \cashpickup_whatsapp_participant_ids($denialNotificationRecord, [$actorId]);
+if ($side === 'receive') {
+	$denialRecipients = array_values(array_unique(array_merge($denialRecipients, \cashpickup_whatsapp_approver_ids())));
+}
+\cashpickup_whatsapp_notify(
+	$denialNotificationRecord,
+	$denialRecipients,
+	'cashpickup creator, assigned agent, and next reviewer',
+	'REJECTED',
+	'Review the rejection reason and correct or reassign the cashpickup as appropriate.',
+	$admin_route.'/'.$plugin_route.'/view/'.$id
+);
+
 message_success('Cashpickup denied');
 redirect($denyReturnPath);

@@ -117,8 +117,10 @@ try{
 	// Check cumulative balance
 	$balance = \CashpickupLedger\fetch_customer_balance_metrics($db, $customerId);
 	$customerBalance = max(0.0, (float)($balance['balance'] ?? 0));
-	$isAssignmentPrivileged = $isOperationsManager;
-	$assignedBalance = \CashpickupCustomerAssignment\get_remaining_amount($db, $customerId, $actorId);
+	$assignedBalance = $isOperationsManager
+		? 0.0
+		: \CashpickupCustomerAssignment\get_remaining_amount($db, $customerId, $actorId);
+	$isDirectWithdrawal = $isOperationsManager || $assignedBalance <= 0.00001;
 	$withdrawalLimit = $customerBalance;
 	if(($amount - $withdrawalLimit) > 0.00001){
 		message_fail('Withdrawal amount exceeds this customer balance (' . number_format($withdrawalLimit, 2) . ').');
@@ -127,13 +129,16 @@ try{
 	$assignmentPlan = null;
 	$pickupCharge = max(0.0, $pickupCharge);
 	$pickupCharge = floor(($pickupCharge + 0.000000001) * 10) / 10;
-	if (!$isAssignmentPrivileged) {
-		$assignedAmount = min($amount, $assignedBalance);
-		$assignmentPlan = \CashpickupCustomerAssignment\plan_allocation($db, $customerId, $actorId, $assignedAmount);
+	if (!$isDirectWithdrawal) {
+		$assignmentPlan = \CashpickupCustomerAssignment\plan_allocation($db, $customerId, $actorId, $amount);
 		if (($assignmentPlan['shortfall'] ?? 0) > 0.00001) {
-			message_fail('Your assigned payout balance changed. Refresh and try again.');
+			message_fail('The withdrawal exceeds your assigned payout balance (' . number_format($assignedBalance, 2) . ').');
 			redirect($admin_route.'/'.$plugin_route.'/customer/'.$customerId);
 		}
+		$pickupCharge = array_sum(array_map(
+			static fn(array $slice): float => (float)($slice['pickup_charge'] ?? 0),
+			$assignmentPlan['slices'] ?? []
+		));
 	}
 
 	if ($pickupCharge >= $amount && $pickupCharge > 0) {
@@ -341,22 +346,29 @@ try{
 	}
 	$latestBalance = \CashpickupLedger\fetch_customer_balance_metrics($db, $customerId);
 	$latestCustomerBalance = max(0.0, (float)($latestBalance['balance'] ?? 0));
-	$latestAssignedBalance = \CashpickupCustomerAssignment\get_remaining_amount($db, $customerId, $actorId);
 	$latestWithdrawalLimit = $latestCustomerBalance;
 	if ($amount > $latestWithdrawalLimit + 0.00001) {
 		throw new \RuntimeException('The available customer payout balance changed. Available: GH₵ ' . number_format($latestWithdrawalLimit, 2) . '.');
 	}
 	$assignmentPlan = null;
-	if (!$isAssignmentPrivileged) {
-		$assignedAmount = min($amount, $latestAssignedBalance);
-		$assignmentPlan = \CashpickupCustomerAssignment\plan_allocation($db, $customerId, $actorId, $assignedAmount);
+	if (!$isDirectWithdrawal) {
+		$assignmentPlan = \CashpickupCustomerAssignment\plan_allocation($db, $customerId, $actorId, $amount);
 		if (($assignmentPlan['shortfall'] ?? 0) > 0.00001) {
 			throw new \RuntimeException('Your assigned payout balance changed. Refresh and try again.');
 		}
+		$latestAssignmentCharge = array_sum(array_map(
+			static fn(array $slice): float => (float)($slice['pickup_charge'] ?? 0),
+			$assignmentPlan['slices'] ?? []
+		));
+		if (abs($latestAssignmentCharge - $pickupCharge) > 0.00001) {
+			throw new \RuntimeException('The assigned payout charge changed. Refresh and try again.');
+		}
+		$pickupCharge = $latestAssignmentCharge;
 	}
 	if ($pickupCharge >= $amount && $pickupCharge > 0) {
 		throw new \RuntimeException('The payout charge exceeds the withdrawal amount.');
 	}
+	$amountPaidOut = round($amount - $pickupCharge, 2);
 
 	// --- Insert one payout row for the full customer withdrawal ---
 	$now = date('Y-m-d H:i:s');
@@ -441,7 +453,7 @@ try{
 	if (!$inserted) {
 		throw new \RuntimeException('Unable to save the customer payout.');
 	}
-	if (!$isAssignmentPrivileged) {
+	if (!$isDirectWithdrawal) {
 		foreach (($assignmentPlan['slices'] ?? []) as $assignmentSlice) {
 			$db->query(
 				"INSERT INTO cashpickup_customer_assignment_payouts (payout_id, assignment_id, amount)
@@ -553,6 +565,31 @@ try{
 			}
 		}
 	}
+
+	$withdrawalNotificationRecord = [
+		'id' => (int)($insertedIds[0] ?? 0),
+		'created_by' => $actorId,
+		'assigned_user_id' => $actorId,
+		'sender_details' => trim((string)($customer->full_name ?? '')),
+		'amount_involved' => $amount,
+		'tracking_id' => trim((string)($customer->tracking_id ?? '')),
+		'approval_status' => $approvalStatus,
+		'transaction_status' => $approvalStatus === 'approved' ? 'Approved' : 'Pending approval',
+	];
+	$withdrawalRecipients = \cashpickup_whatsapp_participant_ids($withdrawalNotificationRecord, [$actorId]);
+	$withdrawalNextAction = 'Review the customer withdrawal and complete any required payout follow-up.';
+	if ($approvalStatus !== 'approved') {
+		$withdrawalRecipients = array_values(array_unique(array_merge($withdrawalRecipients, \cashpickup_whatsapp_approver_ids())));
+		$withdrawalNextAction = 'Review and approve or reject the customer withdrawal.';
+	}
+	\cashpickup_whatsapp_notify(
+		$withdrawalNotificationRecord,
+		$withdrawalRecipients,
+		'customer payout agent and next reviewer',
+		$approvalStatus === 'approved' ? 'CUSTOMER PAYOUT RECORDED' : 'CUSTOMER PAYOUT AWAITING APPROVAL',
+		$withdrawalNextAction,
+		$admin_route.'/'.$plugin_route.'/customer/'.$customerId
+	);
 
 	message_success($approvalStatus === 'approved'
 		? 'Customer payout of GH₵ ' . number_format($amount, 2) . ' recorded.'

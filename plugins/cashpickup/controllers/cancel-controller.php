@@ -177,6 +177,19 @@ try {
 	if (!$db->commit()) {
 		throw new \RuntimeException('Unable to commit cashpickup cancellation.');
 	}
+	$cancelNotificationRecord = array_merge((array)$row, [
+		'approval_status' => 'cancelled',
+		'transaction_status' => 'Cancelled',
+		'denial_reason' => $cancellationReason,
+	]);
+	\cashpickup_whatsapp_notify(
+		$cancelNotificationRecord,
+		\cashpickup_whatsapp_participant_ids($cancelNotificationRecord, [(int)(get_session()->id ?? 0)]),
+		'cashpickup creator and assigned agent',
+		'CANCELLED',
+		'Review the cancellation and coordinate any required reassignment or reconciliation.',
+		$admin_route.'/'.$plugin_route.'/view/'.$id
+	);
 	if ($cashdrawerReversalError !== '') {
 		message_fail('Cashpickup transaction cancelled, but the cashdrawer reversal was not completed. Manual reconciliation is required.');
 	} else {

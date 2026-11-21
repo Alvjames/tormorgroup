@@ -254,6 +254,12 @@ if (!function_exists('backoffice_whatsapp_notify_transaction')) {
             }
 
             $message = implode("\n", $lines);
+            $autoSend = !empty($transaction['auto_send']);
+            $whatsappConfig = $autoSend ? backoffice_whatsapp_config() : [];
+            $canAutoSend = $autoSend
+                && !empty($whatsappConfig['token'])
+                && preg_match('/^your[_ -]/i', (string)$whatsappConfig['token']) !== 1
+                && ctype_digit((string)($whatsappConfig['phone_number_id'] ?? ''));
 
             foreach ($recipientIds as $recipientId) {
                 $phoneResult = backoffice_whatsapp_phone($recipientId);
@@ -264,12 +270,25 @@ if (!function_exists('backoffice_whatsapp_notify_transaction')) {
                     $summary['reasons'][] = $phoneResult['reason'];
                     continue;
                 }
-                
-                $summary['ready']++;
-                $summary['links'][] = [
+
+                $messageLink = [
                     'phone' => $phone,
                     'url' => 'https://wa.me/' . $phone . '?text=' . rawurlencode($message),
                 ];
+                if ($canAutoSend) {
+                    $delivery = backoffice_whatsapp_send($phone, $message);
+                    if (!empty($delivery['sent'])) {
+                        $summary['sent']++;
+                        continue;
+                    }
+                    $summary['failed']++;
+                    $summary['reasons'][] = (string)($delivery['reason'] ?? 'WhatsApp delivery failed.');
+                } elseif ($autoSend) {
+                    $summary['reasons'][] = 'Automatic WhatsApp delivery is not configured; use the prepared message link.';
+                }
+
+                $summary['ready']++;
+                $summary['links'][] = $messageLink;
             }
         } catch (\Throwable $e) {
             error_log('[backoffice-whatsapp] Notification failed: ' . $e->getMessage());

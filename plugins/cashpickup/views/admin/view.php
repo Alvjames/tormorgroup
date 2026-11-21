@@ -1,4 +1,4 @@
-﻿<?php if(!user_can('view_cashpickup')): ?>
+<?php if(!user_can('view_cashpickup')): ?>
 	<div class="alert alert-danger text-center">Access denied.</div>
 <?php else: ?>
 
@@ -628,6 +628,23 @@
 		<div class="text-muted small">#<?=esc($row->id)?> | <?=esc((string)($row->date_created ?? $row->date ?? ''))?></div>
 	</div>
 	<div class="d-flex gap-2">
+	<?php if(!$isModal && $side === 'receive' && (int)($row->created_by ?? 0) === $user_id && (int)($row->assigned_user_id ?? 0) > 0): ?>
+		<?php
+			$assignmentWhatsAppLink = \cashpickup_whatsapp_assignment_link(
+				(int)$row->assigned_user_id,
+				(array)$row,
+				$admin_route.'/'.$plugin_route.'/view/'.(int)$row->id,
+				'Contact the customer and complete the assigned payout.'
+			);
+		?>
+		<?php if($assignmentWhatsAppLink['url'] !== ''): ?>
+			<a class="btn btn-success" href="<?=esc($assignmentWhatsAppLink['url'])?>" target="_blank" rel="noopener">
+				<i class="fa-brands fa-whatsapp me-1" aria-hidden="true"></i>Message assigned agent
+			</a>
+		<?php else: ?>
+			<span class="text-muted small align-self-center"><?=esc($assignmentWhatsAppLink['reason'])?></span>
+		<?php endif; ?>
+	<?php endif; ?>
 	<?php if($canApproveCashpickup): ?>
 		<form method="post" action="<?=ROOT?>/<?=$admin_route?>/<?=$plugin_route?>/approve/<?=esc((string)($row->id ?? 0))?>" class="d-inline">
 			<?=$csrfField?>

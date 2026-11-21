@@ -32,7 +32,7 @@ try {
 		['id' => $customerId]
 	);
 	$rows = $db->query(
-		"SELECT id, customer_id, status
+		"SELECT id, customer_id, assigned_user_id, assigned_by, amount, status
 		 FROM cashpickup_customer_assignments
 		 WHERE id = :id AND customer_id = :customer_id
 		 FOR UPDATE",
@@ -70,6 +70,23 @@ try {
 	if (!$db->commit()) {
 		throw new \RuntimeException('Unable to complete assignment cancellation.');
 	}
+	$customerNotificationRecord = [
+		'id' => $customerId,
+		'created_by' => (int)($rows[0]->assigned_by ?? 0),
+		'assigned_user_id' => (int)($rows[0]->assigned_user_id ?? 0),
+		'sender_details' => '',
+		'amount_involved' => (float)($rows[0]->amount ?? 0),
+		'approval_status' => 'cancelled',
+		'transaction_status' => 'Customer payout assignment cancelled',
+	];
+	\cashpickup_whatsapp_notify(
+		$customerNotificationRecord,
+		\cashpickup_whatsapp_participant_ids($customerNotificationRecord, [$actorId]),
+		'customer payout assigner and released agent',
+		'CUSTOMER ASSIGNMENT CANCELLED',
+		'Review the remaining customer balance and assign it to an agent if payout work remains.',
+		$admin_route . '/' . $plugin_route . '/customer/' . $customerId
+	);
 	message_success('Customer payout assignment cancelled.');
 	redirect($admin_route . '/' . $plugin_route . '/customer/' . $customerId . '#withdraw-section');
 } catch (\Throwable $e) {

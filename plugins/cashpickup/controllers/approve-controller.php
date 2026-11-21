@@ -62,6 +62,24 @@ $approvalReturnPath = $returnToView
 		? $admin_route.'/'.$plugin_route.'/customer/'.$returnCustomerId
 		: $admin_route.'/'.$plugin_route.'/view/'.(int)($row->receive_id ?? 0));
 $isCreditReceive = $side === 'receive' && strtolower(trim((string)($row->credit_mode ?? ''))) === 'credit';
+$notifyApprovalEvent = static function(string $status, string $nextAction, string $reason = '') use ($row, $side, $actorId, $admin_route, $plugin_route): void {
+	$notificationRecord = array_merge((array)$row, [
+		'approval_status' => $status,
+		'denial_reason' => $reason,
+	]);
+	$recipients = \cashpickup_whatsapp_participant_ids($notificationRecord, [$actorId]);
+	if ($side === 'receive' && $status === 'approved') {
+		$recipients = array_values(array_unique(array_merge($recipients, \cashpickup_whatsapp_approver_ids())));
+	}
+	\cashpickup_whatsapp_notify(
+		$notificationRecord,
+		$recipients,
+		'cashpickup creator, assigned agent, and next reviewer',
+		strtoupper($status),
+		$nextAction,
+		$admin_route.'/'.$plugin_route.'/view/'.(int)($row->id ?? 0)
+	);
+};
 
 if ($isCreditReceive) {
 	try {
@@ -140,6 +158,7 @@ if ($side === 'pay' && $prevApproval !== 'approved') {
 				if ($cashpickup->has_error) {
 					throw new \RuntimeException('Unable to record the insufficient-balance denial.');
 				}
+				$notifyApprovalEvent('denied', 'Review the insufficient-balance denial and correct the customer payout if needed.', $denialReason);
 				message_fail('Payout denied automatically: insufficient customer account balance');
 				redirect($approvalReturnPath);
 			}
@@ -201,6 +220,7 @@ if ($side === 'pay' && $prevApproval !== 'approved') {
 					'updated_by' => $actorId,
 					'date_updated' => date('Y-m-d H:i:s'),
 				]);
+				$notifyApprovalEvent('denied', 'Review the overage denial and correct the payout amount if needed.', $sysReason);
 				message_fail('Payout denied automatically: would exceed receive total');
 				redirect($approvalReturnPath);
 			}
@@ -234,6 +254,7 @@ if ($side === 'pay' && $prevApproval !== 'approved') {
 					'updated_by' => $actorId,
 					'date_updated' => date('Y-m-d H:i:s'),
 				]);
+				$notifyApprovalEvent('denied', 'Review the invalid cash payout configuration and correct it before retrying.');
 				message_fail('Payout denied automatically: invalid cash payout configuration');
 				redirect($approvalReturnPath);
 			}
@@ -246,6 +267,7 @@ if ($side === 'pay' && $prevApproval !== 'approved') {
 					'updated_by' => $actorId,
 					'date_updated' => date('Y-m-d H:i:s'),
 				]);
+				$notifyApprovalEvent('denied', 'Review the cashdrawer validation denial and resolve the configuration issue.');
 				message_fail('Payout denied automatically: unable to validate cashdrawer balance');
 				redirect($approvalReturnPath);
 			}
@@ -259,6 +281,7 @@ if ($side === 'pay' && $prevApproval !== 'approved') {
 					'updated_by' => $actorId,
 					'date_updated' => date('Y-m-d H:i:s'),
 				]);
+				$notifyApprovalEvent('denied', 'Review the cashdrawer validation denial and resolve the configuration issue.');
 				message_fail('Payout denied automatically: unable to validate cashdrawer balance');
 				redirect($approvalReturnPath);
 			}
@@ -283,6 +306,7 @@ if ($side === 'pay' && $prevApproval !== 'approved') {
 						'updated_by' => $actorId,
 						'date_updated' => date('Y-m-d H:i:s'),
 					]);
+					$notifyApprovalEvent('denied', 'Review the cash denomination shortage and replenish or correct the payout.', 'Insufficient cash denominations: '.$shortageText);
 					message_fail('Payout denied automatically: insufficient cashdrawer notes for cash payout. Shortages: '.$shortageText);
 					redirect($approvalReturnPath);
 				}
@@ -298,6 +322,7 @@ if ($side === 'pay' && $prevApproval !== 'approved') {
 					'updated_by' => $actorId,
 					'date_updated' => date('Y-m-d H:i:s'),
 				]);
+				$notifyApprovalEvent('denied', 'Review the cashdrawer shortfall and replenish the drawer or correct the payout.', 'Cashdrawer shortfall: GHS '.number_format($shortfall, 2));
 				message_fail('Payout denied automatically: insufficient cashdrawer balance for cash payout. Shortfall: GHS '.number_format($shortfall, 2));
 				redirect($admin_route.'/'.$plugin_route.'/view/'.$receiveId);
 			}
@@ -308,6 +333,7 @@ if ($side === 'pay' && $prevApproval !== 'approved') {
 				'updated_by' => $actorId,
 				'date_updated' => date('Y-m-d H:i:s'),
 			]);
+			$notifyApprovalEvent('denied', 'Review the cashdrawer validation denial and resolve the configuration issue.');
 			message_fail('Payout denied automatically: unable to validate cashdrawer balance');
 			redirect($admin_route.'/'.$plugin_route);
 		}
@@ -329,6 +355,7 @@ if ($side === 'pay' && $prevApproval !== 'approved') {
 					'updated_by' => $actorId,
 					'date_updated' => date('Y-m-d H:i:s'),
 				]);
+				$notifyApprovalEvent('denied', 'Review the invalid transfer payout configuration and correct it before retrying.', $sysReason);
 				message_fail('Payout denied automatically: invalid transfer payout configuration');
 				redirect($admin_route.'/'.$plugin_route);
 			}
@@ -356,6 +383,7 @@ if ($side === 'pay' && $prevApproval !== 'approved') {
 					'updated_by' => $actorId,
 					'date_updated' => date('Y-m-d H:i:s'),
 				]);
+				$notifyApprovalEvent('denied', 'Open an active cashdrawer for the payout owner, then resubmit.', $sysReason);
 				message_fail('Payout denied automatically: no active cashdrawer found for payout owner');
 				redirect($admin_route.'/'.$plugin_route);
 			}
@@ -369,6 +397,7 @@ if ($side === 'pay' && $prevApproval !== 'approved') {
 					'updated_by' => $actorId,
 					'date_updated' => date('Y-m-d H:i:s'),
 				]);
+				$notifyApprovalEvent('denied', 'Resolve the missing cashdrawer balance configuration before retrying.', $sysReason);
 				message_fail('Payout denied automatically: cashdrawer balances table missing');
 				redirect($admin_route.'/'.$plugin_route);
 			}
@@ -403,6 +432,7 @@ if ($side === 'pay' && $prevApproval !== 'approved') {
 					'updated_by' => $actorId,
 					'date_updated' => date('Y-m-d H:i:s'),
 				]);
+				$notifyApprovalEvent('denied', 'Review the transfer channel shortfall and replenish or correct the payout.', $sysReason);
 				message_fail('Payout denied automatically: insufficient cashdrawer balance for transfer payout. Shortfall: GH₵ '.number_format($shortfall, 2));
 				redirect($approvalReturnPath);
 			}
@@ -415,6 +445,7 @@ if ($side === 'pay' && $prevApproval !== 'approved') {
 				'updated_by' => $actorId,
 				'date_updated' => date('Y-m-d H:i:s'),
 			]);
+			$notifyApprovalEvent('denied', 'Review the cashdrawer validation denial and resolve the configuration issue.', $sysReason);
 			message_fail('Payout denied automatically: unable to validate cashdrawer balance');
 			redirect($admin_route.'/'.$plugin_route);
 		}
@@ -471,6 +502,7 @@ if ($side === 'pay' && $prevApproval !== 'approved') {
 							'updated_by' => $actorId,
 							'date_updated' => date('Y-m-d H:i:s'),
 						]);
+						$notifyApprovalEvent('denied', 'Review the cashdrawer deduction failure and reconcile before retrying.', 'Cashdrawer sync failed while applying the payout deduction.');
 						message_fail('Payout denied automatically: unable to apply cashdrawer deduction.');
 						redirect($approvalReturnPath);
 					}
@@ -710,6 +742,12 @@ if ($side === 'pay') {
 	}
 }
 
+$notifyApprovalEvent(
+	'approved',
+	$side === 'receive'
+		? 'Assign an eligible agent to complete the payout.'
+		: 'Continue with any remaining payout work for this cashpickup.'
+);
 message_success('Cashpickup approved');
 if ($returnToView) {
 	redirect($admin_route.'/'.$plugin_route.'/view/'.$id);

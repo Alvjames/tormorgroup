@@ -96,7 +96,32 @@
 	}
 	$customerAssignments = \CashpickupCustomerAssignment\get_customer_assignments($db, $customerId);
 	$unassignedBalance = \CashpickupCustomerAssignment\get_unassigned_balance($db, $customerId);
-	$withdrawAvailable = $canWithdraw ? max(0.0, (float)$metrics['balance']) : 0.0;
+	$assignedWithdrawalBalance = (!$isOperationsManager && $canWithdraw)
+		? \CashpickupCustomerAssignment\get_remaining_amount($db, $customerId, $user_id)
+		: 0.0;
+	$isAssignedWithdrawal = $canWithdraw
+		&& !$isOperationsManager
+		&& $assignedWithdrawalBalance > 0.00001;
+	$withdrawAvailable = $canWithdraw
+		? ($isAssignedWithdrawal
+			? min(max(0.0, (float)$metrics['balance']), $assignedWithdrawalBalance)
+			: max(0.0, (float)$metrics['balance']))
+		: 0.0;
+	$assignedWithdrawalChargeSlices = [];
+	if ($isAssignedWithdrawal) {
+		foreach ($customerAssignments as $assignment) {
+			if (strtolower(trim((string)($assignment->status ?? ''))) !== 'active'
+				|| (int)($assignment->assigned_user_id ?? 0) !== $user_id
+				|| (float)($assignment->remaining_amount ?? 0) <= 0.00001) {
+				continue;
+			}
+			$assignedWithdrawalChargeSlices[] = [
+				'amount' => (float)($assignment->amount ?? 0),
+				'charge' => (float)($assignment->pickup_charge ?? 0),
+				'remaining' => (float)($assignment->remaining_amount ?? 0),
+			];
+		}
+	}
 	$assignmentUsers = [];
 	if ($canAssignPayout) {
 		$assignmentUsers = $db->query(
@@ -1511,8 +1536,12 @@
 			<div class="card border-0 shadow-sm">
 				<div class="card-header d-flex align-items-center justify-content-between">
 					<div>
-						<strong><?=$canWithdraw ? 'Withdraw from Cumulative Balance' : 'Payout assignments'?></strong>
-						<div class="small text-muted"><?=$canWithdraw ? "Withdraw against the customer's total balance. Agent withdrawals are submitted for approval." : "Assign customer balance to eligible agents for payout."?></div>
+						<strong><?=$canWithdraw ? ($isAssignedWithdrawal ? 'Pay Assigned Withdrawal' : 'Initiate Direct Withdrawal') : 'Payout assignments'?></strong>
+						<div class="small text-muted"><?=$canWithdraw
+							? ($isAssignedWithdrawal
+								? "Pay only the customer balance assigned to you. The assignment charge is prorated and deducted automatically; this is not a direct withdrawal."
+								: "Initiate a direct withdrawal from the customer's cumulative balance. Enter any payout charge to deduct.")
+							: "Assign customer balance to eligible agents for payout."?></div>
 					</div>
 					<?php if($canWithdraw): ?>
 						<div class="small">Available to withdraw: <span class="fw-bold <?=((float)$withdrawAvailable < 0) ? 'text-danger' : 'text-success'?>">GH&#8373; <?=number_format((float)$withdrawAvailable, 2)?></span></div>
@@ -1617,7 +1646,9 @@
 					<?php endif; ?>
 					<?php if($canWithdraw): ?>
 					<?php if((float)$withdrawAvailable <= 0.00001): ?>
-						<div class="alert alert-warning mb-0">This customer has no available balance to withdraw.</div>
+						<div class="alert alert-warning mb-0"><?=$isAssignedWithdrawal
+							? 'No remaining payout balance is assigned to you.'
+							: 'This customer has no available balance to withdraw.'?></div>
 					<?php else: ?>
 					<form method="post" action="<?=ROOT?>/<?=$admin_route?>/<?=$plugin_route?>/customer_withdraw/<?=esc((string)$customerId)?>" id="cashpickupWithdrawForm">
 						<?=csrf()?>
@@ -1627,14 +1658,16 @@
 						<input type="hidden" name="cfa_amount" id="withdrawCfaAmount" value="0">
 						<div class="row g-3">
 							<div class="col-12 col-md-4">
-								<label class="form-label">Amount (GH&#8373;) <span class="text-danger">*</span></label>
+								<label class="form-label"><?=$isAssignedWithdrawal ? 'Assigned payout amount' : 'Withdrawal amount'?> (GH&#8373;) <span class="text-danger">*</span></label>
 								<input type="number" step="0.01" min="0.01" max="<?=esc(number_format((float)$withdrawAvailable, 2, '.', ''))?>" name="amount" class="form-control" id="withdrawAmount" required>
 								<small class="text-muted">Max: GH&#8373; <?=number_format((float)$withdrawAvailable, 2)?></small>
 							</div>
 							<div class="col-12 col-md-4">
-								<label class="form-label">Withdrawal Charge (GH&#8373;)</label>
-								<input type="number" step="0.1" min="0" name="pickup_charge" value="0" class="form-control" id="withdrawCharge">
-								<small class="text-muted">Enter the withdrawal charge to deduct from the payout.</small>
+								<label class="form-label"><?=$isAssignedWithdrawal ? 'Assigned payout charge' : 'Withdrawal charge'?> (GH&#8373;)</label>
+								<input type="number" step="0.1" min="0" name="pickup_charge" value="0.00" class="form-control" id="withdrawCharge" <?=$isAssignedWithdrawal ? 'readonly' : ''?>>
+								<small class="text-muted"><?=$isAssignedWithdrawal
+									? 'Automatically prorated from your assignment and deducted from the payout.'
+									: 'Enter the withdrawal charge to deduct from the payout.'?></small>
 							</div>
 							<div class="col-12 col-md-4">
 								<label class="form-label">Payment Method <span class="text-danger">*</span></label>
@@ -1697,7 +1730,7 @@
 							</div>
 						</div>
 						<div class="mt-3">
-							<button type="submit" class="btn btn-warning"><i class="fa fa-hand-holding-dollar"></i> Withdraw</button>
+							<button type="submit" class="btn btn-warning"><i class="fa fa-hand-holding-dollar"></i> <?=$isAssignedWithdrawal ? 'Pay Assigned Withdrawal' : 'Initiate Direct Withdrawal'?></button>
 							<a href="<?=ROOT?>/<?=$admin_route?>/<?=$plugin_route?>/customer/<?=esc((string)$customerId)?>" class="btn btn-secondary">Cancel</a>
 						</div>
 					</form>
@@ -1768,6 +1801,8 @@
 							var amount = document.getElementById('withdrawAmount');
 							var charge = document.getElementById('withdrawCharge');
 							var sellingRate = <?=json_encode((float)$cfaRates['selling_rate'])?>;
+							var isAssignedWithdrawal = <?=$isAssignedWithdrawal ? 'true' : 'false'?>;
+							var assignedChargeSlices = <?=json_encode($assignedWithdrawalChargeSlices, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT)?>;
 							if(!pm) return;
 
 							var blocks = function(){ return document.querySelectorAll('.withdraw-method-block'); };
@@ -1779,6 +1814,24 @@
 							};
 							pm.addEventListener('change', sync);
 
+							var updateAssignedCharge = function(){
+								if(!isAssignedWithdrawal || !charge || !amount) return;
+								var remaining = parseFloat(amount.value) || 0;
+								var totalCharge = 0;
+								assignedChargeSlices.forEach(function(slice){
+									if(remaining <= 0) return;
+									var available = Math.max(0, parseFloat(slice.remaining) || 0);
+									var take = Math.min(available, remaining);
+									var assignedAmount = parseFloat(slice.amount) || 0;
+									var assignmentCharge = parseFloat(slice.charge) || 0;
+									if(take > 0 && assignedAmount > 0 && assignmentCharge > 0){
+										var prorated = assignmentCharge * Math.min(take, assignedAmount) / assignedAmount;
+										totalCharge += Math.floor((prorated + 0.000000001) * 10) / 10;
+									}
+									remaining = Math.max(0, remaining - take);
+								});
+								charge.value = totalCharge.toFixed(2);
+							};
 							var payable = function(){
 								var a = parseFloat(amount && amount.value) || 0;
 								var c = parseFloat(charge && charge.value) || 0;
@@ -1833,6 +1886,7 @@
 								bootstrap.Modal.getOrCreateInstance(ghsModal).hide();
 							});
 							if(amount) amount.addEventListener('input', function(){
+								updateAssignedCharge();
 								updateGhsTarget();
 								updateCfaTarget();
 							});
@@ -1894,7 +1948,9 @@
 								bootstrap.Modal.getOrCreateInstance(cfaModal).hide();
 							});
 							if(charge) charge.addEventListener('input', updateCfaTarget);
-
+							updateAssignedCharge();
+							updateGhsTarget();
+							updateCfaTarget();
 							sync();
 						})();
 					</script>

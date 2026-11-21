@@ -116,6 +116,24 @@ try {
 		throw new \RuntimeException('Unable to complete the customer payout assignment.');
 	}
 
+	$customerNotificationRecord = [
+		'id' => $customerId,
+		'created_by' => $actorId,
+		'assigned_user_id' => $targetUserId,
+		'sender_details' => trim((string)($customer->full_name ?? '')),
+		'amount_involved' => $amount,
+		'approval_status' => 'assigned',
+		'transaction_status' => 'Customer payout assignment',
+	];
+	\cashpickup_whatsapp_notify(
+		$customerNotificationRecord,
+		\cashpickup_whatsapp_participant_ids($customerNotificationRecord, [$actorId, $targetUserId]),
+		'customer payout assigner and agent',
+		'CUSTOMER BALANCE ASSIGNED',
+		'Contact the customer and complete the assigned payout.',
+		$admin_route . '/' . $plugin_route . '/customer/' . $customerId
+	);
+
 	message_success('Customer balance assigned for payout.');
 	redirect($admin_route . '/' . $plugin_route . '/customer/' . $customerId . '#withdraw-section');
 } catch (\Throwable $e) {

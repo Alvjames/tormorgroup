@@ -218,6 +218,29 @@ try {
 		throw new \RuntimeException('Unable to complete assignment cancellation.');
 	}
 
+	$cancelNotificationRows = $db->query(
+		"SELECT * FROM cashpickups WHERE id = :id AND (deleted IS NULL OR deleted = 0) LIMIT 1",
+		['id' => $receiveId]
+	) ?: [];
+	$cancelNotificationRecord = !empty($cancelNotificationRows) ? (array)$cancelNotificationRows[0] : [
+		'id' => $receiveId,
+		'created_by' => 0,
+		'assigned_user_id' => $latestAssigneeId,
+		'approval_status' => 'approved',
+		'transaction_status' => 'Approved',
+	];
+	$cancelNotificationRecord['assigned_user_id'] = $latestAssigneeId;
+	\cashpickup_whatsapp_notify(
+		$cancelNotificationRecord,
+		\cashpickup_whatsapp_participant_ids($cancelNotificationRecord, [$actorId, $targetUserId]),
+		'cashpickup creator, released agent, and next assigned agent',
+		'ASSIGNMENT CANCELLED',
+		$latestAssigneeId > 0
+			? 'The assignment changed. The newly assigned agent should continue the payout.'
+			: 'The assignment was removed. Reassign the remaining payout before continuing.',
+		$admin_route.'/'.$plugin_route.'/view/'.$receiveId
+	);
+
 	message_success('Payout assignment cancelled. The cashpickup deposit remains unchanged.');
 	redirect($admin_route . '/' . $plugin_route . '/view/' . $receiveId . '#transfer');
 	exit;

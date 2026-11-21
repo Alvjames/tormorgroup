@@ -70,6 +70,11 @@ if(!$db->table_exists($tables)){
 }
 
 /** load shared helpers **/
+$cashpickupWhatsAppHelper = plugin_path('helpers/whatsapp-notifications.php');
+if (file_exists($cashpickupWhatsAppHelper)) {
+	require_once $cashpickupWhatsAppHelper;
+}
+
 $cashpickupTransferHelper = plugin_path('helpers/transfer-allocation.php');
 if (file_exists($cashpickupTransferHelper)) {
 	require_once $cashpickupTransferHelper;

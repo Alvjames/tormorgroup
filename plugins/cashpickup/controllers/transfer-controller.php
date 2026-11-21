@@ -650,6 +650,24 @@ try{
 			throw new \RuntimeException('Unable to complete the reassignment.');
 		}
 
+		$notificationRecord = array_merge((array)$row, [
+			'assigned_user_id' => $targetUserId,
+			'amount_involved' => $amountInvolved,
+			'approval_status' => 'approved',
+		]);
+		$notificationRecipients = \cashpickup_whatsapp_participant_ids(
+			$notificationRecord,
+			[$actorId, $sourceUserId, $targetUserId]
+		);
+		\cashpickup_whatsapp_notify(
+			$notificationRecord,
+			$notificationRecipients,
+			'sender, assigned agent, and cashpickup creator',
+			$sourceUserId > 0 ? 'REASSIGNED' : 'ASSIGNED',
+			'Review this assignment and contact the customer to complete the payout.',
+			$admin_route.'/'.$plugin_route.'/view/'.$id
+		);
+
 		message_success('Cashpickup assigned');
 		redirect($admin_route.'/'.$plugin_route.'/view/'.$id);
 
